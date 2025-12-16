@@ -254,57 +254,61 @@ const getFormattedPersonData = (data) => {
 //  FUNCIONES DE DIBUJO (ÁRBOL GENEALÓGICO) - MODIFICADAS
 // ==============================================================================
 
-// Constantes de diseño para el árbol - Ajustadas para 1080x1920
+// Constantes de diseño para el árbol - Ajustadas para 1080x1920 (Vertical)
 const CANVAS_WIDTH_ARBOL = 1080;
 const CANVAS_HEIGHT_ARBOL = 1920;
-const TREE_NODE_WIDTH = 280; // Un poco más ancho para nombres
+// TAMAÑOS DE NODO AJUSTADOS PARA MEJOR VISUALIZACIÓN EN VERTICAL
+const TREE_NODE_WIDTH = 280; 
 const TREE_NODE_HEIGHT = 100;
-const HORIZONTAL_SPACING = 30; // Más compacto
-const VERTICAL_SPACING = 100; // Más espacio vertical para jerarquía
+const HORIZONTAL_SPACING = 30; 
+const VERTICAL_SPACING = 100; 
 
 /**
- * Dibuja un nodo (caja) en el Árbol Genealógico.
+ * Obtiene el color de fondo de la caja basado en el parentesco (imitando el diseño de la imagen).
+ */
+const getBoxColorByParentesco = (parentescoText, isPrincipal) => {
+    if (isPrincipal) {
+        return '#00B8D4'; // Cyan - PRINCIPAL (como el color verde principal en la imagen)
+    } 
+    
+    parentescoText = (parentescoText || '').toUpperCase();
+    
+    if (parentescoText.includes('PADRE') || parentescoText.includes('MADRE')) {
+        return '#FFAB00'; // Ámbar - PADRES (como el color naranja en la imagen)
+    } else if (parentescoText.includes('HERMANO') || parentescoText.includes('HERMANA')) {
+        return '#64DD17'; // Verde Lima - HERMANOS (como el color amarillo/lima en la imagen)
+    } else if (parentescoText.includes('HIJO') || parentescoText.includes('HIJA') || parentescoText.includes('SOBRINO') || parentescoText.includes('SOBRINA')) {
+        return '#3F51B5'; // Azul Oscuro - DESCENDIENTES (como el color azul en la imagen)
+    } else {
+        return '#9E9E9E'; // Gris - OTROS
+    }
+};
+
+
+/**
+ * Dibuja un nodo (caja) en el Árbol Genealógico, imitando el estilo de la imagen subida.
  */
 const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     
-    // 1. Determinar Colores
-    let boxColor = '#1976D2'; // Azul (Otros/Default)
-    let parentescoText = (parentesco || 'FAMILIAR').toUpperCase().replace('N/A', 'FAMILIAR');
-    
-    if (isPrincipal) {
-        boxColor = '#D32F2F'; // Rojo (Principal)
-        parentescoText = 'PRINCIPAL';
-    } else if (parentescoText.includes('PADRE') || parentescoText.includes('MADRE')) {
-        boxColor = '#00796B'; // Verde (Padres)
-    } else if (parentescoText.includes('HERMANO') || parentescoText.includes('HERMANA')) {
-        boxColor = '#FBC02D'; // Amarillo Oscuro (Hermanos)
-    } else if (parentescoText.includes('HIJO') || parentescoText.includes('HIJA') || parentescoText.includes('SOBRINO') || parentescoText.includes('SOBRINA')) {
-        boxColor = '#303F9F'; // Azul Oscuro (Descendientes/Sub)
-    }
-
+    // 1. Determinar Colores y Texto
+    const parentescoText = (isPrincipal ? 'PRINCIPAL' : (parentesco || 'FAMILIAR')).toUpperCase().replace('N/A', 'FAMILIAR');
+    const boxColor = getBoxColorByParentesco(parentesco, isPrincipal);
     const textColor = '#FFFFFF';
-    const borderColor = '#CCCCCC';
+    // El diseño de la imagen no tiene borde visible en la caja, sino un estilo plano.
+    // Usaremos un pequeño 'sombreado' para simular profundidad (opcional) o simplemente el color plano.
 
-    // 2. Dibuja la Caja de Fondo (Bordes redondeados)
-    const radius = 10;
+    // 2. Dibuja la Caja de Fondo (Rectángulo plano)
     ctx.fillStyle = boxColor;
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + TREE_NODE_WIDTH - radius, y);
-    ctx.arcTo(x + TREE_NODE_WIDTH, y, x + TREE_NODE_WIDTH, y + radius, radius);
-    ctx.lineTo(x + TREE_NODE_WIDTH, y + TREE_NODE_HEIGHT - radius);
-    ctx.arcTo(x + TREE_NODE_WIDTH, y + TREE_NODE_HEIGHT, x + TREE_NODE_WIDTH - radius, y + TREE_NODE_HEIGHT, radius);
-    ctx.lineTo(x + radius, y + TREE_NODE_HEIGHT);
-    ctx.arcTo(x, y + TREE_NODE_HEIGHT, x, y + TREE_NODE_HEIGHT - radius, radius);
-    ctx.lineTo(x, y + radius);
-    ctx.arcTo(x, y, x + radius, y, radius);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillRect(x, y, TREE_NODE_WIDTH, TREE_NODE_HEIGHT);
     
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
+    // Opcional: Sombra sutil para el efecto de levantamiento
+    // ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    // ctx.shadowBlur = 4;
+    // ctx.shadowOffsetX = 2;
+    // ctx.shadowOffsetY = 2;
+    // ctx.fillRect(x, y, TREE_NODE_WIDTH, TREE_NODE_HEIGHT);
+    // ctx.shadowColor = 'transparent'; // Desactivar sombra para el texto
+    
     // 3. Dibujar Texto
     const formattedData = getFormattedPersonData(data);
     const fullName = `${formattedData.nombres} ${formattedData.apellido_paterno} ${formattedData.apellido_materno}`.trim();
@@ -312,20 +316,37 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     ctx.fillStyle = textColor;
     ctx.textAlign = 'center';
     
-    // Parentesco
-    ctx.font = `bold 18px ${FONT_FAMILY}`;
-    ctx.fillText(parentescoText, x + TREE_NODE_WIDTH / 2, y + 25);
+    // Parentesco (Línea 1: Más grande)
+    ctx.font = `bold 22px ${FONT_FAMILY}`;
+    ctx.fillText(parentescoText, x + TREE_NODE_WIDTH / 2, y + 30);
     
-    // Nombre
-    ctx.font = `bold 20px ${FONT_FAMILY}`;
+    // Línea separadora blanca sutil (imitando el diseño)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 10, y + 40);
+    ctx.lineTo(x + TREE_NODE_WIDTH - 10, y + 40);
+    ctx.stroke();
+    
+    // Nombre (Línea 2: Un poco más pequeño y ajustado)
+    ctx.font = `bold 16px ${FONT_FAMILY}`;
     // Ajustar el texto si es muy largo
-    const nameText = ctx.measureText(fullName).width > (TREE_NODE_WIDTH - 20) 
-        ? fullName.substring(0, 18) + '...' 
-        : fullName;
-    ctx.fillText(nameText, x + TREE_NODE_WIDTH / 2, y + 55);
+    let nameText = fullName;
+    if (ctx.measureText(fullName).width > (TREE_NODE_WIDTH - 20)) {
+        // Intentar acortar y usar solo nombres y 1 apellido
+        const parts = fullName.split(' ');
+        if (parts.length >= 3) {
+            nameText = `${parts[0]} ${parts[1]}...`; // Nombre y Apellido Paterno, seguido de puntos
+        } else {
+             nameText = fullName.substring(0, 15) + '...'; // Acortar si es necesario
+        }
+    }
     
-    // DNI
-    ctx.font = `16px ${FONT_FAMILY}`;
+    // Si el nombre sigue siendo muy largo, podría requerir 2 líneas, pero mantendremos 1 para imitar el formato.
+    ctx.fillText(nameText, x + TREE_NODE_WIDTH / 2, y + 65);
+    
+    // DNI (Línea 3: Más pequeño)
+    ctx.font = `14px ${FONT_FAMILY}`;
     ctx.fillText(`DNI: ${formattedData.dni}`, x + TREE_NODE_WIDTH / 2, y + 85);
     
     // Retorna el centro del nodo para las conexiones
@@ -349,76 +370,91 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     // --- 1. PROCESAMIENTO Y AGRUPAMIENTO DE NODOS ---
     const nodes = {
         principal: principal,
-        padres: familiares.filter(f => f.tipo?.toUpperCase().includes('PADRE') || f.tipo?.toUpperCase().includes('MADRE')).sort((a, b) => (a.tipo?.toUpperCase().includes('MADRE') ? 1 : -1)), // Madre a la derecha
-        hermanos: familiares.filter(f => f.tipo?.toUpperCase().includes('HERMANO') || f.tipo?.toUpperCase().includes('HERMANA')),
-        hijos: familiares.filter(f => f.tipo?.toUpperCase().includes('HIJO') || f.tipo?.toUpperCase().includes('HIJA')),
-        tios: familiares.filter(f => f.tipo?.toUpperCase().includes('TIO') || f.tipo?.toUpperCase().includes('TIA')),
-        sobrinos: familiares.filter(f => f.tipo?.toUpperCase().includes('SOBRINO') || f.tipo?.toUpperCase().includes('SOBRINA')),
-        primos: familiares.filter(f => f.tipo?.toUpperCase().includes('PRIMO') || f.tipo?.toUpperCase().includes('PRIMA')),
+        // Orden: Madre (si es la consultada) o Padre, luego el otro
+        padres: familiares.filter(f => f.tipo?.toUpperCase().includes('PADRE') || f.tipo?.toUpperCase().includes('MADRE')).sort((a, b) => {
+            if (a.tipo?.toUpperCase().includes('MADRE') && b.tipo?.toUpperCase().includes('PADRE')) return 1;
+            if (a.tipo?.toUpperCase().includes('PADRE') && b.tipo?.toUpperCase().includes('MADRE')) return -1;
+            return 0;
+        }), 
+        hermanos: familiares.filter(f => f.tipo?.toUpperCase().includes('HERMANO') || f.tipo?.toUpperCase().includes('HERMANA')).sort((a, b) => a.tipo?.toUpperCase().includes('HERMANA') ? 1 : -1),
+        hijos: familiares.filter(f => f.tipo?.toUpperCase().includes('HIJO') || f.tipo?.toUpperCase().includes('HIJA')).sort((a, b) => a.tipo?.toUpperCase().includes('HIJA') ? 1 : -1),
+        tios: familiares.filter(f => f.tipo?.toUpperCase().includes('TIO') || f.tipo?.toUpperCase().includes('TIA')).sort((a, b) => a.tipo?.toUpperCase().includes('TIA') ? 1 : -1),
+        sobrinos: familiares.filter(f => f.tipo?.toUpperCase().includes('SOBRINO') || f.tipo?.toUpperCase().includes('SOBRINA')).sort((a, b) => a.tipo?.toUpperCase().includes('SOBRINA') ? 1 : -1),
+        primos: familiares.filter(f => f.tipo?.toUpperCase().includes('PRIMO') || f.tipo?.toUpperCase().includes('PRIMA')).sort((a, b) => a.tipo?.toUpperCase().includes('PRIMA') ? 1 : -1),
         otros: familiares.filter(f => !f.tipo?.toUpperCase().includes('PADRE') && !f.tipo?.toUpperCase().includes('MADRE') && !f.tipo?.toUpperCase().includes('HERMANO') && !f.tipo?.toUpperCase().includes('HERMANA') && !f.tipo?.toUpperCase().includes('HIJO') && !f.tipo?.toUpperCase().includes('HIJA') && !f.tipo?.toUpperCase().includes('TIO') && !f.tipo?.toUpperCase().includes('TIA') && !f.tipo?.toUpperCase().includes('SOBRINO') && !f.tipo?.toUpperCase().includes('SOBRINA') && !f.tipo?.toUpperCase().includes('PRIMO') && !f.tipo?.toUpperCase().includes('PRIMA') && !f.tipo?.toUpperCase().includes('CUÑADO') && !f.tipo?.toUpperCase().includes('CUÑADA')),
         cunyados: familiares.filter(f => f.tipo?.toUpperCase().includes('CUÑADO') || f.tipo?.toUpperCase().includes('CUÑADA'))
     };
     
     // Orden de las capas: Padres -> Tíos -> Principal/Hermanos -> Hijos/Sobrinos -> Primos -> Otros/Cuñados
     const layers = [
-        { name: 'Padres', nodes: nodes.padres, spacing: VERTICAL_SPACING },
-        { name: 'Tíos', nodes: nodes.tios, spacing: VERTICAL_SPACING },
-        { name: 'Principal/Hermanos', nodes: [principal, ...nodes.hermanos], spacing: VERTICAL_SPACING },
-        { name: 'Hijos/Sobrinos', nodes: [...nodes.hijos, ...nodes.sobrinos], spacing: VERTICAL_SPACING },
-        { name: 'Primos', nodes: nodes.primos, spacing: VERTICAL_SPACING },
-        { name: 'Otros/Cuñados', nodes: [...nodes.cunyados, ...nodes.otros], spacing: VERTICAL_SPACING },
-    ].filter(layer => layer.nodes.length > 0 && !(layer.name === 'Principal/Hermanos' && layer.nodes.length === 1 && layer.nodes[0].dni === rawDocumento) );
-    
-    // Si la capa principal solo tiene al principal, no la filtramos.
-    if (layers.find(l => l.name === 'Principal/Hermanos')) {
-        // La eliminamos y luego la re-añadimos si tiene más de 1 nodo (el principal) o la dejamos si tiene solo el principal
-        const principalLayer = layers.find(l => l.name === 'Principal/Hermanos');
-        const principalIndex = layers.findIndex(l => l.name === 'Principal/Hermanos');
-        
-        if (principalLayer.nodes.length === 1) { // Solo tiene al principal
-            layers.splice(principalIndex, 1, { name: 'Principal', nodes: [principal], spacing: VERTICAL_SPACING });
-        }
+        { name: 'Padres', nodes: nodes.padres },
+        { name: 'Tíos', nodes: nodes.tios },
+        { name: 'Principal/Hermanos', nodes: [principal, ...nodes.hermanos].filter((v, i, a) => a.findIndex(t => (t.dni === v.dni)) === i) },
+        { name: 'Hijos/Sobrinos', nodes: [...nodes.hijos, ...nodes.sobrinos] },
+        { name: 'Primos', nodes: nodes.primos },
+        { name: 'Otros/Cuñados', nodes: [...nodes.cunyados, ...nodes.otros] },
+    ].filter(layer => layer.nodes.length > 0 && !(layer.name === 'Principal/Hermanos' && layer.nodes.length === 1 && layer.nodes[0].dni === rawDocumento && nodes.hermanos.length === 0)); // No filtramos la capa principal aunque solo tenga al principal
+
+    // Si la capa principal solo tiene al principal, la renombramos
+    const principalLayer = layers.find(l => l.name === 'Principal/Hermanos');
+    if (principalLayer && principalLayer.nodes.length === 1) {
+        principalLayer.name = 'Principal';
     }
     
-    // Recalcular el máximo ancho para el canvas
+    // --- Cálculo dinámico del Ancho ---
     let maxNodesInRow = 0;
     layers.forEach(layer => {
         maxNodesInRow = Math.max(maxNodesInRow, layer.nodes.length);
     });
     
-    // Calculo dinámico de Ancho
+    // Forzar el ancho del canvas, pero calcular el ancho de contenido real
     const totalNodeWidth = maxNodesInRow * TREE_NODE_WIDTH;
     const totalSpacing = (maxNodesInRow - 1) * HORIZONTAL_SPACING;
     const canvasContentWidth = totalNodeWidth + totalSpacing;
-    const CANVAS_WIDTH = Math.max(canvasContentWidth + MARGIN * 2, CANVAS_WIDTH_ARBOL); // Forzar a 1080
+    const CANVAS_WIDTH = CANVAS_WIDTH_ARBOL; // Forzado a 1080 (Vertical)
 
-    // Calculo dinámico de Altura
+    // --- Cálculo dinámico del Espaciado Vertical ---
     const numRows = layers.length;
     const rowsHeight = numRows * TREE_NODE_HEIGHT;
-    const rowsSpacing = (numRows - 1) * VERTICAL_SPACING;
-    const CANVAS_HEIGHT = HEADER_HEIGHT + MARGIN * 2 + rowsHeight + rowsSpacing + FOOTER_HEIGHT + 50; // Ajuste final para 1920
-
-    // Forzar la altura a 1920 y ajustar el espaciado
-    const FINAL_CANVAS_HEIGHT = CANVAS_HEIGHT_ARBOL;
+    const FINAL_CANVAS_HEIGHT = CANVAS_HEIGHT_ARBOL; // Forzado a 1920 (Vertical)
     const availableDrawingHeight = FINAL_CANVAS_HEIGHT - (HEADER_HEIGHT + MARGIN * 2 + FOOTER_HEIGHT);
-    const totalSpacingForced = availableDrawingHeight - rowsHeight;
-    const forcedVerticalSpacing = totalSpacingForced / Math.max(1, numRows - 1); // Redistribuir el espacio
+    
+    // Distribución del espacio vertical
+    let forcedVerticalSpacing = VERTICAL_SPACING; 
+    if (numRows > 1) {
+        // Reducir o aumentar el espaciado para que quepa en 1920
+        const totalSpacingForced = availableDrawingHeight - rowsHeight;
+        forcedVerticalSpacing = totalSpacingForced / (numRows - 1); 
+        forcedVerticalSpacing = Math.max(80, Math.min(150, forcedVerticalSpacing)); // Limitar el espaciado
+    } else if (numRows === 1) {
+        // Si solo hay una fila, la centramos verticalmente
+        forcedVerticalSpacing = availableDrawingHeight / 2 - TREE_NODE_HEIGHT / 2;
+    }
 
     // --- 2. GENERACIÓN DEL CANVAS ---
     const canvas = createCanvas(CANVAS_WIDTH, FINAL_CANVAS_HEIGHT);
     const ctx = canvas.getContext("2d");
 
-    // Fondo
-    ctx.fillStyle = '#EFEBE9'; // Fondo claro simulando pergamino
+    // Fondo Blanco Puro (para imitar el diseño de la imagen)
+    ctx.fillStyle = BACKGROUND_COLOR; 
     ctx.fillRect(0, 0, CANVAS_WIDTH, FINAL_CANVAS_HEIGHT);
     
     // Título
+    const titleY = MARGIN + 25;
     ctx.fillStyle = COLOR_TITLE;
     ctx.font = `bold 30px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`${API_NAME} - DNI: ${rawDocumento}`, CANVAS_WIDTH / 2, MARGIN + 25);
+    ctx.fillText(`ÁRBOL GENEALÓGICO`, CANVAS_WIDTH / 2, titleY);
     ctx.font = `20px ${FONT_FAMILY}`;
-    ctx.fillText(`Total de Familiares Encontrados: ${familiares.length}`, CANVAS_WIDTH / 2, MARGIN + 60);
+    ctx.fillText(`DNI: ${rawDocumento} - Total de Familiares: ${familiares.length}`, CANVAS_WIDTH / 2, titleY + 35);
+    
+    // Línea separadora
+    ctx.strokeStyle = '#9E9E9E'; // Gris
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(MARGIN, titleY + 50);
+    ctx.lineTo(CANVAS_WIDTH - MARGIN, titleY + 50);
+    ctx.stroke();
     
     let currentY = MARGIN + HEADER_HEIGHT;
     const nodeCenters = {
@@ -439,27 +475,33 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     
     // Puntos centrales de las capas para las conexiones
     let previousLayerNodes = [];
-    let previousLayerCenterY = 0;
     
     layers.forEach((layer, layerIndex) => {
         let currentLayerNodesCenters = [];
         const currentLayerNodes = layer.nodes;
-        const currentSpacing = layerIndex === 0 ? 0 : forcedVerticalSpacing;
         
-        currentY += currentSpacing;
-        
-        // Calcular ancho y offset de la fila
+        // El espaciado solo aplica si no es la primera capa
+        if (layerIndex === 0 && numRows > 1) {
+            // Si es la primera capa y hay más, la movemos hacia el margen superior
+            currentY = MARGIN + HEADER_HEIGHT + forcedVerticalSpacing / 2;
+        } else if (numRows === 1) {
+             // Si solo hay una capa (solo principal)
+             currentY = MARGIN + HEADER_HEIGHT + forcedVerticalSpacing;
+        } else if (layerIndex > 0) {
+            currentY += forcedVerticalSpacing;
+        }
+
+        // 3.1. Dibujar los nodos de la capa actual
         const rowWidth = currentLayerNodes.length * TREE_NODE_WIDTH + (currentLayerNodes.length - 1) * HORIZONTAL_SPACING;
         let startX = (CANVAS_WIDTH - rowWidth) / 2;
         
-        // 3.1. Dibujar los nodos de la capa actual
         currentLayerNodes.forEach((p, index) => {
             const isPrincipal = p.dni === rawDocumento;
             const parentesco = p.tipo || p.parentesco;
             const node = drawTreeNode(ctx, p, startX, currentY, isPrincipal, parentesco);
             currentLayerNodesCenters.push(node);
             
-            // Asignar al mapa de centros (usando el tipo de la API externa)
+            // Asignar al mapa de centros
             if (isPrincipal) {
                 nodeCenters.principal = node;
             } else if (p.tipo?.toUpperCase().includes('PADRE') || p.tipo?.toUpperCase().includes('MADRE')) {
@@ -484,29 +526,39 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         });
 
         // 3.2. Conexiones entre capas (Solo para relaciones Padre/Hijo)
-        ctx.strokeStyle = '#6D4C41'; // Marrón oscuro
+        ctx.strokeStyle = '#795548'; // Marrón oscuro para las líneas de conexión (imitando el tronco)
         ctx.lineWidth = lineThickness;
         
         if (layerIndex > 0) {
             // Conexión principal: Padres/Tíos -> Principal/Hermanos -> Hijos
+
+            const previousLayerName = layers[layerIndex - 1].name;
+            const currentLayerName = layer.name;
             
-            // Si la capa actual es "Principal/Hermanos" o "Principal"
-            if (layer.name.includes('Principal')) {
-                // Conectar Padres a la línea horizontal de Principal/Hermanos
+            // -----------------------------------------------------------
+            // --- CONEXIÓN: Padres -> Principal/Hermanos ---
+            // -----------------------------------------------------------
+            if (previousLayerName.includes('Padres') && currentLayerName.includes('Principal')) {
                 if (nodeCenters.padres.length > 0 && nodeCenters.principal) {
                     const principalNodes = [nodeCenters.principal, ...nodeCenters.hermanos];
-                    if (principalNodes.length > 0) {
-                        const minX = Math.min(...principalNodes.map(n => n.centerX));
-                        const maxX = Math.max(...principalNodes.map(n => n.centerX));
-                        const principalBranchY = nodeCenters.principal.topY - currentSpacing / 2;
-                        
-                        // 1. Dibuja la línea horizontal de unión de Padres
-                        const parentBranchY = nodeCenters.padres[0].bottomY + forcedVerticalSpacing / 2 - 20; // Un poco más cerca del nodo
-                        ctx.beginPath();
-                        ctx.moveTo(nodeCenters.padres[0].centerX, parentBranchY);
-                        ctx.lineTo(nodeCenters.padres[nodeCenters.padres.length - 1].centerX, parentBranchY);
-                        ctx.stroke();
+                    const principalNodesForLine = principalNodes.length > 0 ? principalNodes : [nodeCenters.principal];
 
+                    if (principalNodesForLine.length > 0) {
+                        const minX = Math.min(...principalNodesForLine.map(n => n.centerX));
+                        const maxX = Math.max(...principalNodesForLine.map(n => n.centerX));
+                        
+                        // Y de la línea horizontal de unión de Padres: 
+                        // A mitad de camino entre la parte inferior de los Padres y la parte superior del Principal
+                        const parentBranchY = nodeCenters.padres[0].bottomY + forcedVerticalSpacing / 2;
+                        
+                        // 1. Línea horizontal de unión de Padres
+                        if (nodeCenters.padres.length > 1) {
+                            ctx.beginPath();
+                            ctx.moveTo(nodeCenters.padres[0].centerX, parentBranchY);
+                            ctx.lineTo(nodeCenters.padres[nodeCenters.padres.length - 1].centerX, parentBranchY);
+                            ctx.stroke();
+                        }
+                        
                         // 2. Conexiones verticales a cada Padre
                         nodeCenters.padres.forEach(p => {
                             ctx.beginPath();
@@ -515,21 +567,22 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
                             ctx.stroke();
                         });
 
-                        // 3. Tronco Principal de Padres a Principal
+                        // 3. Tronco Principal de Padres a Principal (descendiendo)
                         ctx.beginPath();
+                        // El tronco debe bajar desde el centro de la línea de Padres hasta la línea horizontal de Hermanos
+                        const siblingBranchY = nodeCenters.principal.topY + TREE_NODE_HEIGHT / 2;
                         ctx.moveTo(nodeCenters.principal.centerX, parentBranchY);
-                        ctx.lineTo(nodeCenters.principal.centerX, nodeCenters.principal.topY);
+                        ctx.lineTo(nodeCenters.principal.centerX, siblingBranchY);
                         ctx.stroke();
                         
-                        // 4. Conexión de Hermanos (Línea horizontal a la altura de la parte superior del nodo principal)
-                        const siblingBranchY = nodeCenters.principal.topY + TREE_NODE_HEIGHT / 2;
+                        // 4. Conexión de Hermanos (Línea horizontal que cruza a la mitad del nodo principal)
                         ctx.beginPath();
                         ctx.moveTo(minX, siblingBranchY);
                         ctx.lineTo(maxX, siblingBranchY);
                         ctx.stroke();
                         
                         // 5. Conexiones verticales a cada Principal/Hermano
-                        principalNodes.forEach(n => {
+                        principalNodesForLine.forEach(n => {
                             ctx.beginPath();
                             ctx.moveTo(n.centerX, n.topY);
                             ctx.lineTo(n.centerX, siblingBranchY);
@@ -537,20 +590,26 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
                         });
                     }
                 }
-            } else if (layer.name.includes('Hijos/Sobrinos')) {
-                 // Conectar Principal a la línea horizontal de Hijos/Sobrinos
-                if (nodeCenters.principal && currentLayerNodesCenters.length > 0) {
+            }
+            
+            // -----------------------------------------------------------
+            // --- CONEXIÓN: Principal -> Hijos/Sobrinos ---
+            // -----------------------------------------------------------
+            if ((previousLayerName.includes('Principal') || previousLayerName.includes('Hermanos')) && currentLayerName.includes('Hijos')) {
+                 if (nodeCenters.principal && currentLayerNodesCenters.length > 0) {
                     const minX = Math.min(...currentLayerNodesCenters.map(n => n.centerX));
                     const maxX = Math.max(...currentLayerNodesCenters.map(n => n.centerX));
-                    const childrenBranchY = currentLayerNodesCenters[0].topY - currentSpacing / 2;
                     
-                    // 1. Tronco Principal de Principal a Hijos
+                    // Y de la línea horizontal de unión de Hijos/Sobrinos
+                    const childrenBranchY = nodeCenters.principal.bottomY + forcedVerticalSpacing / 2;
+                    
+                    // 1. Tronco Principal de Principal (saliendo por abajo)
                     ctx.beginPath();
                     ctx.moveTo(nodeCenters.principal.centerX, nodeCenters.principal.bottomY);
                     ctx.lineTo(nodeCenters.principal.centerX, childrenBranchY);
                     ctx.stroke();
 
-                    // 2. Dibuja la línea horizontal de unión de Hijos/Sobrinos
+                    // 2. Línea horizontal de unión de Hijos/Sobrinos
                     ctx.beginPath();
                     ctx.moveTo(minX, childrenBranchY);
                     ctx.lineTo(maxX, childrenBranchY);
@@ -565,11 +624,10 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
                     });
                 }
             }
-            // Para otras capas (Tíos, Primos, Otros), se dibujan como listas sin conexiones jerárquicas directas.
+            // Para otras capas (Tíos, Primos, Otros), no se dibujan conexiones jerárquicas directas.
         }
 
         previousLayerNodes = currentLayerNodesCenters;
-        previousLayerCenterY = currentY + TREE_NODE_HEIGHT / 2;
         currentY += TREE_NODE_HEIGHT;
     });
 
@@ -835,7 +893,7 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     conyugeRowsData.forEach((row, index) => {
         const startY = currentY;
         const isConyugeRow = index < 2; // Solo las dos primeras filas tienen el texto largo del cónyuge
-        const contentText = String(row[1]).toUpperCase();
+        const contentText = isConyugeRow ? String(row[1]).toUpperCase() : String(row[1] || 'N/A').toUpperCase();
         
         // 1. Calcular altura de la fila
         ctx.font = `bold 14px ${FONT_FAMILY}`;
@@ -850,7 +908,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         } else {
             // Filas de estado civil, no deberían necesitar salto de línea, usamos altura mínima
             rowHeight = ROW_HEIGHT;
-            wrappedContent = { lines: [contentText], height: LINE_HEIGHT }; 
+            wrappedContent = wrapText(ctx, contentText, contentWidth, LINE_HEIGHT);
+             // wrappedContent = { lines: [contentText], height: LINE_HEIGHT }; 
         }
 
         // 2. Dibujar Fondos y Bordes
