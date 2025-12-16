@@ -753,7 +753,7 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     const infoCol4Width = INNER_WIDTH / 2 - infoCol3Width;
 
     // Campos que tienen más probabilidades de requerir ajuste de texto y estiramiento de fila
-    const wrapFieldsIndices = [1, 2, 3]; // Índice de las filas con texto largo: Oficina, Departamento, Distrito
+    const wrapFieldsIndices = [0, 1, 2, 3]; // TODOS LOS CAMPOS DE INFO PODRÍAN SER LARGOS
 
     rawInfoData.forEach((row, rowIndex) => {
         let rowHeight = MIN_ROW_HEIGHT;
@@ -767,9 +767,9 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         let wrappedCol4 = { lines: [String(row[3]).toUpperCase()], height: LINE_HEIGHT }; // Inicializado con altura de 1 línea
 
         if (shouldWrap) {
-            // Columna 2: Oficina de Registro, Departamento, Distrito
+            // Columna 2: Valor 1
             wrappedCol2 = wrapText(ctx, String(row[1]).toUpperCase(), infoCol2Width - 2 * CELL_PADDING, LINE_HEIGHT);
-            // Columna 4: Nro. de Acta, Provincia, Régimen Patrimonial
+            // Columna 4: Valor 2
             wrappedCol4 = wrapText(ctx, String(row[3]).toUpperCase(), infoCol4Width - 2 * CELL_PADDING, LINE_HEIGHT);
             
             // La altura de la fila es determinada por el texto más largo + un padding de celda.
@@ -907,9 +907,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
             rowHeight = Math.max(ROW_HEIGHT, wrappedContent.height + 2 * (CELL_PADDING - 5)); 
         } else {
             // Filas de estado civil, no deberían necesitar salto de línea, usamos altura mínima
-            rowHeight = ROW_HEIGHT;
             wrappedContent = wrapText(ctx, contentText, contentWidth, LINE_HEIGHT);
-             // wrappedContent = { lines: [contentText], height: LINE_HEIGHT }; 
+            rowHeight = Math.max(ROW_HEIGHT, wrappedContent.height + 2 * (CELL_PADDING - 5));
         }
 
         // 2. Dibujar Fondos y Bordes
@@ -925,6 +924,7 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         
         // 3. Dibujar Texto
         const textYCenterOffset = 5; // Offset base para centrado vertical
+        // Ajustar el bloque de texto centrado en Y
         const blockYStart = startY + (rowHeight / 2) - (wrappedContent.height / 2);
 
         // Columna 1 (Etiqueta de Rol)
