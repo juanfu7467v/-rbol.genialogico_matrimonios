@@ -35,12 +35,12 @@ const CANVAS_WIDTH_DEFAULT = 800; // Ancho más estándar para un documento
 const MARGIN = 40;
 const FONT_FAMILY = "sans-serif"; // Mantenemos sans-serif que se parece a la imagen
 const COLOR_TITLE = '#000000';
-const COLOR_TEXT = '#000000';
+const COLOR_TEXT = '#000000'; // Color de texto principal (NEGRO)
 const COLOR_SECONDARY_TEXT = '#333333';
 const FALLBACK_PHOTO_URL = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh4p_jX8U0kG7R8tD9K0h0bVv7V9jE_s2O_jJ4_X5kZ0X9qL_n9jX5Q6g8Q/s512/placeholder.png"; 
 
 // Colores específicos del diseño de la imagen subida
-const BACKGROUND_COLOR = '#FFFFFF';
+const BACKGROUND_COLOR = '#FFFFFF'; // Color de fondo principal (BLANCO)
 const HEADER_BACKGROUND_COLOR = '#F0F0F0'; // Gris claro
 const TABLE_BORDER_COLOR = '#CCCCCC'; // Borde claro
 const TABLE_HEADER_COLOR = '#333333'; // Color de fuente oscuro para encabezados
@@ -266,28 +266,6 @@ const TREE_NODE_HEIGHT = 100;
 const VERTICAL_SPACING = 100; 
 const ROW_TITLE_HEIGHT = 30; // Altura para el título de la capa (ej: "Padres")
 
-// --- NUEVAS CONSTANTES PARA EL ESTILO DE LÍNEA ---
-const CONNECTION_COLOR = '#00B8D4'; // Azul (para cumplir con el requisito de "azul, verde degradado")
-const CONNECTION_THICKNESS = 4; // Grosor de línea de 4px
-
-// --- NUEVA FUNCIÓN AUXILIAR PARA DIBUJAR LÍNEAS DE CONEXIÓN ---
-/**
- * Dibuja una línea de conexión con el color y grosor especificados por el usuario.
- * @param {CanvasRenderingContext2D} ctx - Contexto del canvas.
- * @param {number} x1 - Coordenada X inicial.
- * @param {number} y1 - Coordenada Y inicial.
- * @param {number} x2 - Coordenada X final.
- * @param {number} y2 - Coordenada Y final.
- */
-const drawConnectingLine = (ctx, x1, y1, x2, y2) => {
-    ctx.strokeStyle = CONNECTION_COLOR;
-    ctx.lineWidth = CONNECTION_THICKNESS;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-};
-
 
 /**
  * Obtiene el color de fondo de la caja basado en el parentesco (imitando el diseño de la imagen).
@@ -329,14 +307,22 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     
     // 1. Determinar Colores y Texto
     const parentescoText = (isPrincipal ? 'PRINCIPAL' : (parentesco || 'FAMILIAR')).toUpperCase().replace('N/A', 'FAMILIAR');
-    const boxColor = getBoxColorByParentesco(parentesco, isPrincipal);
-    const textColor = '#FFFFFF';
+    const boxColor = getBoxColorByParentesco(parentesco, isPrincipal); // Color para el BORDE
+    
+    // MODIFICACIÓN CLAVE: Fondo BLANCO y Texto NEGRO
+    const backgroundColor = BACKGROUND_COLOR; // Fondo Blanco
+    const textColor = COLOR_TEXT; // Texto Negro
 
     // 2. Dibuja la Caja de Fondo (Rectángulo plano)
-    ctx.fillStyle = boxColor;
+    ctx.fillStyle = backgroundColor;
     ctx.fillRect(x, y, TREE_NODE_WIDTH, TREE_NODE_HEIGHT);
     
-    // 3. Dibujar Texto (Simulando la estructura interna de la caja)
+    // 3. Dibuja el Borde (con el color de parentesco)
+    ctx.strokeStyle = boxColor;
+    ctx.lineWidth = 4; // Un borde más grueso para que destaque
+    ctx.strokeRect(x, y, TREE_NODE_WIDTH, TREE_NODE_HEIGHT);
+    
+    // 4. Dibujar Texto (Simulando la estructura interna de la caja)
     const formattedData = getFormattedPersonData(data);
     
     ctx.fillStyle = textColor;
@@ -347,8 +333,8 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     ctx.textAlign = 'center'; // Centrado en la caja
     ctx.fillText(parentescoText, x + TREE_NODE_WIDTH / 2, y + 25);
     
-    // Línea separadora blanca sutil
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    // Línea separadora sutil (Gris oscuro)
+    ctx.strokeStyle = '#CCCCCC'; 
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x + 5, y + 35);
@@ -367,34 +353,42 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     // --- Fila 2 (Nombres y Apellidos) ---
     // Columna 1 (Etiqueta)
     ctx.font = `bold 12px ${FONT_FAMILY}`;
+    ctx.fillStyle = COLOR_SECONDARY_TEXT; // Etiqueta en gris oscuro
     ctx.fillText("Nombre:", x + PADDING, y + 55); 
     // Columna 2 (Valor Nombre)
     ctx.font = `14px ${FONT_FAMILY}`;
+    ctx.fillStyle = textColor; // Valor en negro
     // Usar la mitad del ancho para el nombre
     let nomDisplay = nomPart.length > 15 ? nomPart.substring(0, 15) + '...' : nomPart;
     ctx.fillText(nomDisplay, x + PADDING + QUARTER_WIDTH, y + 55, HALF_WIDTH - QUARTER_WIDTH - PADDING); 
     
     // Columna 3 (Etiqueta)
     ctx.font = `bold 12px ${FONT_FAMILY}`;
+    ctx.fillStyle = COLOR_SECONDARY_TEXT; // Etiqueta en gris oscuro
     ctx.fillText("Apell. P.:", x + HALF_WIDTH + PADDING, y + 55); 
     // Columna 4 (Valor Apellido P.)
     ctx.font = `14px ${FONT_FAMILY}`;
+    ctx.fillStyle = textColor; // Valor en negro
     let apDisplay = apPart.length > 10 ? apPart.substring(0, 10) + '...' : apPart;
     ctx.fillText(apDisplay, x + HALF_WIDTH + PADDING + QUARTER_WIDTH, y + 55, HALF_WIDTH - QUARTER_WIDTH - PADDING); 
 
     // --- Fila 3 (DNI y Apellido Materno) ---
     // Columna 1 (Etiqueta DNI)
     ctx.font = `bold 12px ${FONT_FAMILY}`;
+    ctx.fillStyle = COLOR_SECONDARY_TEXT; // Etiqueta en gris oscuro
     ctx.fillText("DNI:", x + PADDING, y + 80); 
     // Columna 2 (Valor DNI)
     ctx.font = `14px ${FONT_FAMILY}`;
+    ctx.fillStyle = textColor; // Valor en negro
     ctx.fillText(formattedData.dni, x + PADDING + QUARTER_WIDTH, y + 80); 
     
     // Columna 3 (Etiqueta Apell. M.)
     ctx.font = `bold 12px ${FONT_FAMILY}`;
+    ctx.fillStyle = COLOR_SECONDARY_TEXT; // Etiqueta en gris oscuro
     ctx.fillText("Apell. M.:", x + HALF_WIDTH + PADDING, y + 80); 
     // Columna 4 (Valor Apellido M.)
     ctx.font = `14px ${FONT_FAMILY}`;
+    ctx.fillStyle = textColor; // Valor en negro
     let amDisplay = amPart.length > 10 ? amPart.substring(0, 10) + '...' : amPart;
     ctx.fillText(amDisplay, x + HALF_WIDTH + PADDING + QUARTER_WIDTH, y + 80, HALF_WIDTH - QUARTER_WIDTH - PADDING);
 
@@ -575,9 +569,8 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         }
         
         // 4.3. Conexiones entre capas (Solo para relaciones Padre/Hijo)
-        // MODIFICADO: Uso de la nueva función drawConnectingLine con el estilo del usuario.
-        // ctx.strokeStyle = '#795548'; // Marrón oscuro para las líneas de conexión (Original)
-        // ctx.lineWidth = lineThickness; (Original)
+        ctx.strokeStyle = '#795548'; // Marrón oscuro para las líneas de conexión
+        ctx.lineWidth = lineThickness;
         
         if (layerIndex > 0) {
             const previousLayerName = layers[layerIndex - 1].name;
@@ -604,29 +597,39 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
                         
                         // 1. Línea horizontal de unión de Padres
                         if (nodeCenters.padres.length > 1) {
-                            drawConnectingLine(ctx, 
-                                nodeCenters.padres[0].centerX, 
-                                parentBranchY, 
-                                nodeCenters.padres[nodeCenters.padres.length - 1].centerX, 
-                                parentBranchY
-                            );
+                            ctx.beginPath();
+                            ctx.moveTo(nodeCenters.padres[0].centerX, parentBranchY);
+                            ctx.lineTo(nodeCenters.padres[nodeCenters.padres.length - 1].centerX, parentBranchY);
+                            ctx.stroke();
                         }
                         
                         // 2. Conexiones verticales a cada Padre
                         nodeCenters.padres.forEach(p => {
-                            drawConnectingLine(ctx, p.centerX, p.bottomY, p.centerX, parentBranchY);
+                            ctx.beginPath();
+                            ctx.moveTo(p.centerX, p.bottomY);
+                            ctx.lineTo(p.centerX, parentBranchY);
+                            ctx.stroke();
                         });
 
                         // 3. Tronco Principal de Padres a Principal (descendiendo)
+                        ctx.beginPath();
                         const siblingBranchY = nodeCenters.principal.topY - VERTICAL_SPACING / 2;
-                        drawConnectingLine(ctx, nodeCenters.principal.centerX, parentBranchY, nodeCenters.principal.centerX, siblingBranchY);
+                        ctx.moveTo(nodeCenters.principal.centerX, parentBranchY);
+                        ctx.lineTo(nodeCenters.principal.centerX, siblingBranchY);
+                        ctx.stroke();
                         
                         // 4. Conexión de Hermanos (Línea horizontal que cruza a la mitad de la zona de espaciado)
-                        drawConnectingLine(ctx, minX, siblingBranchY, maxX, siblingBranchY);
+                        ctx.beginPath();
+                        ctx.moveTo(minX, siblingBranchY);
+                        ctx.lineTo(maxX, siblingBranchY);
+                        ctx.stroke();
                         
                         // 5. Conexiones verticales a cada Principal/Hermano
                         principalNodesForLine.forEach(n => {
-                            drawConnectingLine(ctx, n.centerX, n.topY, n.centerX, siblingBranchY);
+                            ctx.beginPath();
+                            ctx.moveTo(n.centerX, n.topY);
+                            ctx.lineTo(n.centerX, siblingBranchY);
+                            ctx.stroke();
                         });
                     }
                 }
@@ -644,19 +647,23 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
                     const childrenBranchY = nodeCenters.principal.bottomY + VERTICAL_SPACING / 2;
                     
                     // 1. Tronco Principal de Principal (saliendo por abajo)
-                    drawConnectingLine(ctx, 
-                        nodeCenters.principal.centerX, 
-                        nodeCenters.principal.bottomY, 
-                        nodeCenters.principal.centerX, 
-                        childrenBranchY
-                    );
+                    ctx.beginPath();
+                    ctx.moveTo(nodeCenters.principal.centerX, nodeCenters.principal.bottomY);
+                    ctx.lineTo(nodeCenters.principal.centerX, childrenBranchY);
+                    ctx.stroke();
 
                     // 2. Línea horizontal de unión de Hijos/Sobrinos
-                    drawConnectingLine(ctx, minX, childrenBranchY, maxX, childrenBranchY);
+                    ctx.beginPath();
+                    ctx.moveTo(minX, childrenBranchY);
+                    ctx.lineTo(maxX, childrenBranchY);
+                    ctx.stroke();
 
                     // 3. Conexiones verticales a cada Hijo/Sobrino
                     currentLayerNodesCenters.forEach(c => {
-                        drawConnectingLine(ctx, c.centerX, c.topY, c.centerX, childrenBranchY);
+                        ctx.beginPath();
+                        ctx.moveTo(c.centerX, c.topY);
+                        ctx.lineTo(c.centerX, childrenBranchY);
+                        ctx.stroke();
                     });
                 }
             }
@@ -703,8 +710,13 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         let itemY = legendY + (row + 1) * LEGEND_LINE_HEIGHT;
 
         // Dibujar el cuadro de color
-        ctx.fillStyle = item.color;
+        // MODIFICACIÓN: Dibujar solo el borde de color sobre un fondo blanco para la leyenda,
+        // reflejando el diseño de la caja.
+        ctx.fillStyle = BACKGROUND_COLOR; // Fondo blanco para la caja
         ctx.fillRect(itemX, itemY - LEGEND_BOX_SIZE / 2, LEGEND_BOX_SIZE, LEGEND_BOX_SIZE);
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(itemX, itemY - LEGEND_BOX_SIZE / 2, LEGEND_BOX_SIZE, LEGEND_BOX_SIZE);
         
         // Dibujar el texto
         ctx.fillStyle = COLOR_TEXT;
