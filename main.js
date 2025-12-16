@@ -30,15 +30,20 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 const GITHUB_BRANCH = "main";
 
-// --- Constantes de Diseño Generales ---
-const CANVAS_WIDTH_DEFAULT = 1080; 
-const MARGIN = 30;
-const FONT_FAMILY = "sans-serif";
+// --- Constantes de Diseño Generales (Ajustadas para el diseño de la imagen subida) ---
+const CANVAS_WIDTH_DEFAULT = 800; // Ancho más estándar para un documento
+const MARGIN = 40;
+const FONT_FAMILY = "sans-serif"; // Mantenemos sans-serif que se parece a la imagen
 const COLOR_TITLE = '#000000';
 const COLOR_TEXT = '#000000';
 const COLOR_SECONDARY_TEXT = '#333333';
 const FALLBACK_PHOTO_URL = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh4p_jX8U0kG7R8tD9K0h0bVv7V9jE_s2O_jJ4_X5kZ0X9qL_n9jX5Q6g8Q/s512/placeholder.png"; 
 
+// Colores específicos del diseño de la imagen subida
+const BACKGROUND_COLOR = '#FFFFFF';
+const HEADER_BACKGROUND_COLOR = '#F0F0F0'; // Gris claro
+const TABLE_BORDER_COLOR = '#CCCCCC'; // Borde claro
+const TABLE_HEADER_COLOR = '#333333'; // Color de fuente oscuro para encabezados
 
 // ==============================================================================
 //  FUNCIONES DE UTILIDAD
@@ -244,29 +249,6 @@ const getFormattedPersonData = (data) => {
     };
 };
 
-/**
- * Función para limpiar el valor antes de mostrarlo, reemplazando N/A.
- * @param {string|number|null} value - El valor a limpiar.
- * @returns {string} El valor formateado o '...' si es inválido.
- */
-const cleanValueForDisplay = (value) => {
-    // Convierte a string, lo pone en mayúsculas y quita espacios
-    const clean = String(value || '').toUpperCase().trim();
-    
-    // Reemplaza valores nulos, vacíos o "N/A"
-    if (!clean || clean === 'N/A' || clean === 'N/ A' || clean === 'NULL' || clean === 'UNDEFINED') {
-        return ''; // Deja vacío
-        // return '[...]'; // O si prefiere tres puntos
-    }
-    
-    // Si la cadena es muy larga, la acorta y añade puntos
-    if (clean.length > 50) {
-        return clean.substring(0, 50) + '...';
-    }
-    
-    return clean;
-};
-
 
 // ==============================================================================
 //  FUNCIONES DE DIBUJO (ÁRBOL GENEALÓGICO)
@@ -310,7 +292,7 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, type = 'Familiar') => {
 
     // 2. Dibujar Texto
     const formattedData = getFormattedPersonData(data);
-    const fullName = `${cleanValueForDisplay(formattedData.nombres)} ${cleanValueForDisplay(formattedData.apellido_paterno)} ${cleanValueForDisplay(formattedData.apellido_materno)}`.trim();
+    const fullName = `${formattedData.nombres} ${formattedData.apellido_paterno} ${formattedData.apellido_materno}`.trim();
     const parentescoText = isPrincipal ? 'PRINCIPAL' : (data.parentesco || type).toUpperCase().replace('N/A', 'FAMILIAR');
 
     ctx.fillStyle = textColor;
@@ -330,7 +312,7 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, type = 'Familiar') => {
     
     // DNI
     ctx.font = `14px ${FONT_FAMILY}`;
-    ctx.fillText(`DNI: ${cleanValueForDisplay(formattedData.dni)}`, x + TREE_NODE_WIDTH / 2, y + 80);
+    ctx.fillText(`DNI: ${formattedData.dni}`, x + TREE_NODE_WIDTH / 2, y + 80);
     
     // Retorna el centro del nodo para las conexiones
     return {
@@ -597,258 +579,301 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
 
 
 // ==============================================================================
-//  FUNCIONES DE DIBUJO (ACTA DE MATRIMONIO)
+//  FUNCIONES DE DIBUJO (ACTA DE MATRIMONIO) - MODIFICADA PARA USAR EL DISEÑO SUBIDO
 // ==============================================================================
 
 /**
- * Dibuja la imagen del Acta de Matrimonio.
- * * **MODIFICADO** para cumplir con los requisitos del usuario:
- * - Fondo degradado azul/verde.
- * - Sin bordes de imagen.
- * - Reemplazo de 'N/A' por string vacío (limpio) o '[...]' si se prefiere (dejado vacío por defecto).
- * - Diseño tabular con textos claros.
- * - Fondo estirado a la altura del contenedor.
+ * Dibuja la imagen del Acta de Matrimonio, imitando el diseño de la imagen subida.
  */
 const generateMarriageCertificateImage = async (rawDocumento, principal, data) => {
     
-    const API_NAME = "MATRIMONIOS"; 
-    const CANVAS_WIDTH = 800;
+    // --- NUEVAS CONSTANTES DE DISEÑO BASADAS EN LA IMAGEN SUBIDA ---
+    const API_TITLE = "Acta";
+    const API_SUBTITLE = "MATRIMONIO";
+    const BRAND_NAME = "Industrias López";
+    const CANVAS_WIDTH = 900; // Ajustado para un diseño de documento
     const CANVAS_HEIGHT = 1000;
     const MARGIN_X = 50;
     const MARGIN_Y = 50;
     const INNER_WIDTH = CANVAS_WIDTH - 2 * MARGIN_X;
-    const CELL_PADDING = 10;
+    const CELL_PADDING = 15;
+    const ROW_HEIGHT = 40;
+    const LARGE_ROW_HEIGHT = 50;
     
     // 1. Generación del Canvas
     const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     const ctx = canvas.getContext("2d");
 
-    // Fondo base (color que simula papel formal)
-    ctx.fillStyle = '#F5F5DC'; // Beige claro
+    // Fondo Blanco Puro (para replicar el diseño minimalista)
+    ctx.fillStyle = BACKGROUND_COLOR; 
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // --- NUEVO: Degradado de nube azul-verde en el centro (Cumple con el requisito de degradado) ---
-    // Se ajusta el tamaño del degradado para que ocupe todo el alto/ancho del canvas
-    const cloudGradient = ctx.createRadialGradient(
-        CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 0, // Punto central de inicio
-        CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH * 0.8 // Punto central de fin (más grande para cubrir)
-    );
-    // Azul claro a verde azulado (con baja opacidad)
-    cloudGradient.addColorStop(0, 'rgba(0, 128, 255, 0.1)'); // Azul claro semitransparente
-    cloudGradient.addColorStop(0.5, 'rgba(0, 128, 128, 0.15)'); // Verde azulado semitransparente
-    cloudGradient.addColorStop(1, 'rgba(0, 128, 128, 0.05)'); // Casi transparente
+    // 2. Encabezado (Título y Logo - Simulado)
+    let currentY = MARGIN_Y;
     
-    ctx.fillStyle = cloudGradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Cubre todo el canvas con el degradado
-    // -----------------------------------------------------------------------------------------------
-
-    // Borde Decorativo Interno (Simulación de sello/marco oficial)
-    // Se elimina el borde externo del canvas, dejando solo el marco decorativo interno.
-    ctx.strokeStyle = '#8B0000'; // Rojo oscuro (Gobierno/Oficial)
-    ctx.lineWidth = 15;
-    ctx.strokeRect(15, 15, CANVAS_WIDTH - 30, CANVAS_HEIGHT - 30); // Marco más interno
-    ctx.strokeStyle = '#4A148C'; // Púrpura oscuro
-    ctx.lineWidth = 3;
-    ctx.strokeRect(MARGIN_X - 10, MARGIN_Y - 10, INNER_WIDTH + 20, CANVAS_HEIGHT - 2 * MARGIN_Y + 20); // Marco intermedio
-
-    // 2. Encabezado Oficial
-    ctx.fillStyle = '#000000';
-    ctx.textAlign = 'center';
-    
-    let currentY = MARGIN_Y + 30;
-    
-    ctx.font = `bold 24px ${FONT_FAMILY}`;
-    ctx.fillText("REPÚBLICA DEL PERÚ", CANVAS_WIDTH / 2, currentY);
-    
-    currentY += 30;
-    ctx.font = `bold 30px ${FONT_FAMILY}`;
-    ctx.fillText("REGISTRO NACIONAL DE IDENTIFICACIÓN Y ESTADO CIVIL", CANVAS_WIDTH / 2, currentY);
+    // Título Principal
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.textAlign = 'left';
+    ctx.font = `bold 60px ${FONT_FAMILY}`;
+    ctx.fillText(API_TITLE, MARGIN_X, currentY + 30);
     
     currentY += 40;
-    ctx.fillStyle = '#8B0000';
-    ctx.font = `bold 40px serif`;
-    ctx.fillText("ACTA DE MATRIMONIO", CANVAS_WIDTH / 2, currentY); 
-    currentY += 20; 
+    ctx.font = `bold 30px ${FONT_FAMILY}`;
+    ctx.fillText(API_SUBTITLE, MARGIN_X, currentY + 30);
+    
+    currentY += 50;
 
-    // 3. Datos de Registro (Fuera de la tabla principal)
-    currentY += 20;
-    ctx.fillStyle = '#333333';
-    ctx.textAlign = 'left';
-    ctx.font = `italic 18px ${FONT_FAMILY}`;
-    ctx.fillText(`REGISTRO ÚNICO DE IDENTIFICACIÓN: ${cleanValueForDisplay(data.registro_unico) || '[...]'}`, MARGIN_X + 10, currentY);
-    
-    currentY += 30;
-    ctx.fillText(`NÚMERO: ${cleanValueForDisplay(data.nro_acta) || '[...]'}`, MARGIN_X + 10, currentY);
-    
-    // Línea divisoria
-    currentY += 15;
-    ctx.strokeStyle = '#333333';
-    ctx.lineWidth = 1;
+    // Logo (Texto a la derecha)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.font = `bold 20px ${FONT_FAMILY}`;
+    ctx.fillText(BRAND_NAME, CANVAS_WIDTH - MARGIN_X, MARGIN_Y + 10);
+    // Simulación de icono (tres triángulos)
     ctx.beginPath();
-    ctx.moveTo(MARGIN_X, currentY);
-    ctx.lineTo(CANVAS_WIDTH - MARGIN_X, currentY);
-    ctx.stroke();
+    const logoX = CANVAS_WIDTH - MARGIN_X - ctx.measureText(BRAND_NAME).width - 10;
+    const logoY = MARGIN_Y;
+    ctx.moveTo(logoX, logoY + 15);
+    ctx.lineTo(logoX + 15, logoY);
+    ctx.lineTo(logoX + 30, logoY + 15);
+    ctx.closePath();
+    ctx.fillStyle = '#000000'; // Negro
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(logoX + 5, logoY + 20);
+    ctx.lineTo(logoX + 20, logoY + 5);
+    ctx.lineTo(logoX + 35, logoY + 20);
+    ctx.closePath();
+    ctx.fillStyle = '#666666'; // Gris oscuro
+    ctx.fill();
 
-    // 4. Secciones de Datos en Formato de Tabla
-    currentY += 20;
-    const tableX = MARGIN_X;
-    const tableY = currentY;
-    const col1Width = 220; // Ancho de la columna de etiquetas
-    const col2Width = INNER_WIDTH - col1Width; // Ancho de la columna de valores
-    const rowHeight = 35;
-    const borderColor = '#4A148C'; // Usamos el púrpura del marco
-    const headerColor = '#D1C4E9'; // Púrpura muy claro
+    // Línea separadora (no visible en la imagen, pero ayuda a la estructura)
+    currentY = 120;
     
-    const rows = [];
+    // 3. SECCIÓN 1: Información (Matrimonio)
+    currentY += 30;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    ctx.fillText("Información", MARGIN_X, currentY);
+
+    currentY += 10;
     
-    // Agrupación de datos para la tabla
+    // Dibuja la tabla de 2x4 (Filas de la sección Información)
+    const infoRows = [
+        ["Fecha de Matrimonio", data.fecha_matrimonio || 'N/A', "Registro Único", data.registro_unico || 'N/A'],
+        ["Oficina de Registro", data.oficina_registro || 'N/A', "Nro. de Acta", data.nro_acta || 'N/A'],
+        ["Departamento", data.departamento || 'N/A', "Provincia", data.provincia || 'N/A'],
+        ["Distrito", data.distrito || data.lugar || 'N/A', "Régimen Patrimonial", data.regimen_patrimonial || 'N/A']
+    ];
+    
+    const infoCol1Width = 180;
+    const infoCol2Width = INNER_WIDTH / 2 - infoCol1Width;
+    const infoCol3Width = 180;
+    const infoCol4Width = INNER_WIDTH / 2 - infoCol3Width;
+    
+    infoRows.forEach((row, index) => {
+        const startY = currentY + index * LARGE_ROW_HEIGHT;
+        
+        // Columna 1 (Etiqueta 1)
+        ctx.fillStyle = HEADER_BACKGROUND_COLOR;
+        ctx.fillRect(MARGIN_X, startY, infoCol1Width, LARGE_ROW_HEIGHT);
+        ctx.fillStyle = TABLE_HEADER_COLOR;
+        ctx.font = `14px ${FONT_FAMILY}`;
+        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + LARGE_ROW_HEIGHT / 2 + 5);
+        
+        // Columna 2 (Valor 1)
+        ctx.fillStyle = BACKGROUND_COLOR;
+        ctx.fillRect(MARGIN_X + infoCol1Width, startY, infoCol2Width, LARGE_ROW_HEIGHT);
+        ctx.fillStyle = COLOR_TEXT;
+        ctx.font = `bold 14px ${FONT_FAMILY}`;
+        ctx.fillText(String(row[1]).toUpperCase(), MARGIN_X + infoCol1Width + CELL_PADDING, startY + LARGE_ROW_HEIGHT / 2 + 5);
+        
+        // Columna 3 (Etiqueta 2)
+        ctx.fillStyle = HEADER_BACKGROUND_COLOR;
+        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, infoCol3Width, LARGE_ROW_HEIGHT);
+        ctx.fillStyle = TABLE_HEADER_COLOR;
+        ctx.font = `14px ${FONT_FAMILY}`;
+        ctx.fillText(row[2], MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + LARGE_ROW_HEIGHT / 2 + 5);
+        
+        // Columna 4 (Valor 2)
+        ctx.fillStyle = BACKGROUND_COLOR;
+        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2 + infoCol3Width, startY, infoCol4Width, LARGE_ROW_HEIGHT);
+        ctx.fillStyle = COLOR_TEXT;
+        ctx.font = `bold 14px ${FONT_FAMILY}`;
+        ctx.fillText(String(row[3]).toUpperCase(), MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, startY + LARGE_ROW_HEIGHT / 2 + 5);
+        
+        // Dibuja los bordes
+        ctx.strokeStyle = TABLE_BORDER_COLOR;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, LARGE_ROW_HEIGHT);
+        ctx.beginPath();
+        ctx.moveTo(MARGIN_X + infoCol1Width, startY);
+        ctx.lineTo(MARGIN_X + infoCol1Width, startY + LARGE_ROW_HEIGHT);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(MARGIN_X + INNER_WIDTH / 2 + infoCol3Width, startY);
+        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2 + infoCol3Width, startY + LARGE_ROW_HEIGHT);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, startY);
+        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, startY + LARGE_ROW_HEIGHT);
+        ctx.stroke();
+    });
+
+    currentY += infoRows.length * LARGE_ROW_HEIGHT;
+    
+    // 4. SECCIÓN 2: Asistentes (Cónyuges y Observaciones)
+    currentY += 30;
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    ctx.fillText("Cónyuges y Testigos", MARGIN_X, currentY);
+
+    currentY += 10;
+    
+    // Datos de los Cónyuges
     const conyuge1 = getFormattedPersonData(principal);
     const conyuge2 = getFormattedPersonData(data.conyuge || {});
     
-    // Función para añadir una fila a la estructura de la tabla
-    const addRow = (label, value, isHeader = false) => {
-        rows.push({ 
-            label: label, 
-            value: cleanValueForDisplay(value), // Usamos la función de limpieza
-            isHeader 
-        });
-    };
-
-    // --- Detalles del Matrimonio ---
-    addRow("DETALLES DEL MATRIMONIO", '', true);
-    addRow("FECHA DEL ACTO", data.fecha_matrimonio);
-    addRow("LUGAR DEL ACTO", `${data.departamento || ''}, ${data.provincia || ''}, ${data.distrito || ''}`.trim().replace(/^, | ,$|, ,/g, ' - '));
-    addRow("OFICINA DE REGISTRO", data.oficina_registro);
-
-    // --- Cónyuge 1 (Principal) ---
-    addRow("CÓNYUGE 1 (DATOS DEL TITULAR)", '', true);
-    addRow("DOCUMENTO DE IDENTIDAD", conyuge1.dni);
-    // Unir nombres completos y limpiarlos
-    addRow("NOMBRE COMPLETO", cleanValueForDisplay(`${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno}`));
-    addRow("FECHA DE NACIMIENTO", principal.fecha_nacimiento);
-    addRow("ESTADO CIVIL ANTERIOR", data.estado_civil_c1);
-
-    // --- Cónyuge 2 (Pareja) ---
-    addRow("CÓNYUGE 2 (DATOS DE LA PAREJA)", '', true);
-    addRow("DOCUMENTO DE IDENTIDAD", conyuge2.dni);
-    addRow("NOMBRE COMPLETO", cleanValueForDisplay(`${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno}`));
-    addRow("FECHA DE NACIMIENTO", data.conyuge?.fecha_nacimiento);
-    addRow("ESTADO CIVIL ANTERIOR", data.estado_civil_c2);
-    
-    // --- Información Adicional ---
-    addRow("INFORMACIÓN LEGAL Y ADICIONAL", '', true);
-    addRow("RÉGIMEN PATRIMONIAL", data.regimen_patrimonial);
-    addRow("OBSERVACIONES (TEXTO LARGO)", data.observaciones);
-
-    // Dibuja la Tabla
-    let currentTableY = tableY;
-    
-    ctx.strokeStyle = borderColor;
+    // Fila de encabezado
+    currentY += 5;
+    ctx.fillStyle = HEADER_BACKGROUND_COLOR;
+    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH / 2, ROW_HEIGHT);
+    ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, currentY, INNER_WIDTH / 2, ROW_HEIGHT);
+    ctx.strokeStyle = TABLE_BORDER_COLOR;
     ctx.lineWidth = 1;
+    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
+    ctx.beginPath();
+    ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, currentY);
+    ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, currentY + ROW_HEIGHT);
+    ctx.stroke();
     
-    rows.forEach(row => {
-        // Fondo de la fila
-        if (row.isHeader) {
-            ctx.fillStyle = headerColor;
-            ctx.fillRect(tableX, currentTableY, INNER_WIDTH, rowHeight);
-        } else {
-            ctx.fillStyle = '#FFFFFF'; // Fondo blanco para datos
-            ctx.fillRect(tableX, currentTableY, INNER_WIDTH, rowHeight);
-        }
+    ctx.fillStyle = TABLE_HEADER_COLOR;
+    ctx.font = `bold 16px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
+    ctx.fillText("Rol", MARGIN_X + CELL_PADDING, currentY + ROW_HEIGHT / 2 + 5);
+    ctx.fillText("Nombre Completo y DNI", MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, currentY + ROW_HEIGHT / 2 + 5);
+    
+    currentY += ROW_HEIGHT;
 
-        // Borde exterior
-        ctx.strokeRect(tableX, currentTableY, INNER_WIDTH, rowHeight);
+    const conyugeRows = [
+        ["Cónyuge Principal (1)", `${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno} (DNI: ${conyuge1.dni})`],
+        ["Cónyuge Pareja (2)", `${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno} (DNI: ${conyuge2.dni})`],
+        // Asumiendo que los padres o testigos pueden estar en los datos
+        // NOTA: No hay campos específicos para "testigos" en el JSON original, solo se simula el diseño.
+        ["Estado Civil Anterior C1", data.estado_civil_c1 || 'N/A'],
+        ["Estado Civil Anterior C2", data.estado_civil_c2 || 'N/A']
+    ];
+    
+    conyugeRows.forEach((row, index) => {
+        const startY = currentY + index * ROW_HEIGHT;
         
-        // Separador de columnas
+        ctx.fillStyle = BACKGROUND_COLOR;
+        ctx.fillRect(MARGIN_X, startY, INNER_WIDTH / 2, ROW_HEIGHT);
+        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, INNER_WIDTH / 2, ROW_HEIGHT);
+        ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, ROW_HEIGHT);
         ctx.beginPath();
-        ctx.moveTo(tableX + col1Width, currentTableY);
-        ctx.lineTo(tableX + col1Width, currentTableY + rowHeight);
+        ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, startY);
+        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, startY + ROW_HEIGHT);
         ctx.stroke();
-
-        // Texto de la Columna 1 (Etiqueta)
-        ctx.fillStyle = row.isHeader ? '#4A148C' : '#333333'; // Púrpura para encabezados, negro para etiquetas
-        ctx.font = row.isHeader ? `bold 16px ${FONT_FAMILY}` : `bold 14px ${FONT_FAMILY}`;
-        ctx.textAlign = 'left';
-        ctx.fillText(row.label, tableX + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
-
-        // Texto de la Columna 2 (Valor)
-        if (!row.isHeader) {
-            ctx.fillStyle = '#000000';
-            ctx.font = `14px ${FONT_FAMILY}`;
-            
-            // Lógica de salto de línea simple si el texto es demasiado largo para una línea
-            const textToDisplay = row.value || '[...]';
-            const maxTextWidth = col2Width - 2 * CELL_PADDING;
-            
-            if (ctx.measureText(textToDisplay).width > maxTextWidth) {
-                // Si excede, muestra solo una parte y usa una fuente más pequeña para intentar encajar
-                ctx.font = `12px ${FONT_FAMILY}`;
-                const lines = [];
-                let currentLine = '';
-                const words = textToDisplay.split(' ');
-                
-                for (const word of words) {
-                    const testLine = currentLine + word + ' ';
-                    if (ctx.measureText(testLine).width > maxTextWidth && currentLine.length > 0) {
-                        lines.push(currentLine.trim());
-                        currentLine = word + ' ';
-                    } else {
-                        currentLine = testLine;
-                    }
-                }
-                lines.push(currentLine.trim());
-
-                if (lines.length === 1) {
-                    ctx.fillText(lines[0], tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
-                } else if (lines.length > 1) {
-                    // Si son dos o más líneas, solo muestra la primera para no salir del espacio, o muestra '[...] Texto largo'
-                    ctx.fillText(lines[0].substring(0, 30) + '...', tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
-                }
-            } else {
-                ctx.fillText(textToDisplay, tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
-            }
-        }
         
-        currentTableY += rowHeight;
+        ctx.fillStyle = COLOR_TEXT;
+        ctx.font = `14px ${FONT_FAMILY}`;
+        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + ROW_HEIGHT / 2 + 5);
+        ctx.fillText(String(row[1]).toUpperCase(), MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + ROW_HEIGHT / 2 + 5);
     });
 
-    currentY = currentTableY + 50;
+    currentY += conyugeRows.length * ROW_HEIGHT;
     
-    // 5. Sellos y Firmas (Espacios)
+    // 5. SECCIÓN 3: Orden del Día (Observaciones)
+    currentY += 30;
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.font = `bold 24px ${FONT_FAMILY}`;
+    ctx.fillText("Observaciones y Certificación", MARGIN_X, currentY);
+
+    currentY += 10;
+    
+    // Fila de Encabezado de Observaciones
+    currentY += 5;
+    ctx.fillStyle = HEADER_BACKGROUND_COLOR;
+    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
+    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
+    ctx.fillStyle = TABLE_HEADER_COLOR;
+    ctx.font = `bold 16px ${FONT_FAMILY}`;
+    ctx.textAlign = 'left';
+    ctx.fillText("Observaciones Registradas", MARGIN_X + CELL_PADDING, currentY + ROW_HEIGHT / 2 + 5);
+    
+    currentY += ROW_HEIGHT;
+    
+    // Fila de Contenido de Observaciones (Más alta para que quepa más texto)
+    const observationHeight = 80;
+    ctx.fillStyle = BACKGROUND_COLOR;
+    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, observationHeight);
+    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, observationHeight);
+    
+    ctx.fillStyle = COLOR_TEXT;
+    ctx.font = `14px ${FONT_FAMILY}`;
+    const obsText = data.observaciones || 'NO HAY OBSERVACIONES ADICIONALES REGISTRADAS EN ESTA ACTA.';
+    
+    // Wrap text para las observaciones
+    const words = obsText.split(' ');
+    let line = '';
+    const lineHeight = 18;
+    let textY = currentY + CELL_PADDING + 5;
+    
+    for (let i = 0; i < words.length; i++) {
+        const testLine = line + words[i] + ' ';
+        if (ctx.measureText(testLine).width > INNER_WIDTH - 2 * CELL_PADDING && i > 0) {
+            ctx.fillText(line.trim(), MARGIN_X + CELL_PADDING, textY);
+            line = words[i] + ' ';
+            textY += lineHeight;
+        } else {
+            line = testLine;
+        }
+    }
+    ctx.fillText(line.trim(), MARGIN_X + CELL_PADDING, textY);
+    
+    currentY += observationHeight;
+
+    // 6. Pie de Página (Simulación de Firmas)
+    currentY += 50;
+    
     ctx.textAlign = 'center';
-    ctx.font = `bold 18px ${FONT_FAMILY}`;
-    
-    // Espacio de Firma 1
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.font = `14px ${FONT_FAMILY}`;
+
+    // Firma 1
     ctx.beginPath();
     ctx.moveTo(CANVAS_WIDTH / 4, currentY);
-    ctx.lineTo(CANVAS_WIDTH / 4, currentY - 50);
+    ctx.lineTo(CANVAS_WIDTH / 4, currentY + 30);
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillText("Firma Cónyuge 1", CANVAS_WIDTH / 4, currentY + 20);
+    ctx.fillText("_________________________", CANVAS_WIDTH / 4, currentY + 45);
+    ctx.fillText("Firma Cónyuge 1", CANVAS_WIDTH / 4, currentY + 65);
     
-    // Espacio de Firma 2
+    // Firma 2
     ctx.beginPath();
     ctx.moveTo(CANVAS_WIDTH * 3 / 4, currentY);
-    ctx.lineTo(CANVAS_WIDTH * 3 / 4, currentY - 50);
+    ctx.lineTo(CANVAS_WIDTH * 3 / 4, currentY + 30);
     ctx.stroke();
-    ctx.fillText("Firma Cónyuge 2", CANVAS_WIDTH * 3 / 4, currentY + 20);
+    ctx.fillText("_________________________", CANVAS_WIDTH * 3 / 4, currentY + 45);
+    ctx.fillText("Firma Cónyuge 2", CANVAS_WIDTH * 3 / 4, currentY + 65);
     
-    currentY += 70;
+    currentY += 100;
     
-    // Espacio de Sello y Registrador
+    // Firma Registrador
     ctx.beginPath();
     ctx.moveTo(CANVAS_WIDTH / 2, currentY);
-    ctx.lineTo(CANVAS_WIDTH / 2, currentY - 50);
+    ctx.lineTo(CANVAS_WIDTH / 2, currentY + 30);
     ctx.stroke();
-    ctx.fillText("Sello y Firma del Registrador Civil", CANVAS_WIDTH / 2, currentY + 20);
-
-    // 6. Pie de Página
-    const footerY = CANVAS_HEIGHT - MARGIN_Y + 10;
-    ctx.fillStyle = '#000000';
+    ctx.fillText("_________________________", CANVAS_WIDTH / 2, currentY + 45);
+    ctx.fillText("Registrador Civil", CANVAS_WIDTH / 2, currentY + 65);
+    
+    // Pie de Página final
+    ctx.fillStyle = COLOR_SECONDARY_TEXT;
     ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
-    ctx.fillText(`Generado por ACTA DE MATRIMONIO el: ${new Date().toLocaleDateString('es-ES')}`, CANVAS_WIDTH - MARGIN_X, footerY);
+    ctx.fillText(`Acta de Matrimonio Generada el: ${new Date().toLocaleDateString('es-ES')}`, CANVAS_WIDTH - MARGIN_X, CANVAS_HEIGHT - 20);
 
     return canvas.toBuffer('image/png');
 };
