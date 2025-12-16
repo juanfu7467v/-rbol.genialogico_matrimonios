@@ -9,7 +9,7 @@ const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = "0.0.00";
+const HOST = "0.0.0.0";
 
 // AGREGADO: Habilitar CORS para todas las rutas y orígenes
 app.use(cors()); 
@@ -583,7 +583,7 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
  * @param {string} text - Texto a envolver.
  * @param {number} maxWidth - Ancho máximo permitido para el texto.
  * @param {number} lineHeight - Altura de línea.
- * @returns {Array<{text: string, height: number}>} Lista de líneas con la altura total.
+ * @returns {Array<{lines: string[], height: number}>} Objeto con la lista de líneas y la altura total.
  */
 const wrapText = (ctx, text, maxWidth, lineHeight) => {
     const words = text.split(' ');
@@ -697,8 +697,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         ctx.font = `bold 14px ${FONT_FAMILY}`;
         const shouldWrap = wrapFieldsIndices.includes(rowIndex);
 
-        let wrappedCol2 = { lines: [String(row[1]).toUpperCase()], height: MIN_ROW_HEIGHT };
-        let wrappedCol4 = { lines: [String(row[3]).toUpperCase()], height: MIN_ROW_HEIGHT };
+        let wrappedCol2 = { lines: [String(row[1]).toUpperCase()], height: LINE_HEIGHT }; // Inicializado con altura de 1 línea
+        let wrappedCol4 = { lines: [String(row[3]).toUpperCase()], height: LINE_HEIGHT }; // Inicializado con altura de 1 línea
 
         if (shouldWrap) {
             // Columna 2: Oficina de Registro, Departamento
@@ -761,10 +761,11 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         // Columna 2 (Valor 1 - Ajuste de Texto)
         ctx.fillStyle = COLOR_TEXT;
         ctx.font = `bold 14px ${FONT_FAMILY}`;
-        let textY = startY + CELL_PADDING + 5;
         if (shouldWrap) {
+            // Usar la posición centrada ajustada por la altura total del texto envuelto
             wrappedCol2.lines.forEach((line, i) => {
-                ctx.fillText(line, MARGIN_X + infoCol1Width + CELL_PADDING, startY + (rowHeight / 2) - (wrappedCol2.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5);
+                const lineY = startY + (rowHeight / 2) - (wrappedCol2.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5;
+                ctx.fillText(line, MARGIN_X + infoCol1Width + CELL_PADDING, lineY);
             });
         } else {
             ctx.fillText(wrappedCol2.lines[0], MARGIN_X + infoCol1Width + CELL_PADDING, startY + textYCenterOffset);
@@ -775,7 +776,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         ctx.font = `bold 14px ${FONT_FAMILY}`;
         if (shouldWrap) {
             wrappedCol4.lines.forEach((line, i) => {
-                ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, startY + (rowHeight / 2) - (wrappedCol4.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5);
+                const lineY = startY + (rowHeight / 2) - (wrappedCol4.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5;
+                ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, lineY);
             });
         } else {
             ctx.fillText(wrappedCol4.lines[0], MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, startY + textYCenterOffset);
@@ -798,50 +800,93 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     
     // Fila de encabezado
     currentY += 5;
+    const headerRowHeight = ROW_HEIGHT;
     ctx.fillStyle = HEADER_BACKGROUND_COLOR;
-    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
+    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, headerRowHeight);
     ctx.strokeStyle = TABLE_BORDER_COLOR;
     ctx.lineWidth = 1;
-    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
+    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, headerRowHeight);
     ctx.beginPath();
     ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, currentY);
-    ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, currentY + ROW_HEIGHT);
+    ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, currentY + headerRowHeight);
     ctx.stroke();
     
     ctx.fillStyle = TABLE_HEADER_COLOR;
     ctx.font = `bold 16px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
-    ctx.fillText("Rol", MARGIN_X + CELL_PADDING, currentY + ROW_HEIGHT / 2 + 5);
-    ctx.fillText("Nombre Completo y DNI", MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, currentY + ROW_HEIGHT / 2 + 5);
+    ctx.fillText("Rol", MARGIN_X + CELL_PADDING, currentY + headerRowHeight / 2 + 5);
+    ctx.fillText("Nombre Completo y DNI", MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, currentY + headerRowHeight / 2 + 5);
     
-    currentY += ROW_HEIGHT;
+    currentY += headerRowHeight;
 
-    const conyugeRows = [
+    const conyugeRowsData = [
         ["Cónyuge Principal (1)", `${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno} (DNI: ${conyuge1.dni})`],
         ["Cónyuge Pareja (2)", `${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno} (DNI: ${conyuge2.dni})`],
-        ["Estado Civil Anterior C1", data.estado_civil_c1 || 'N/A'],
-        ["Estado Civil Anterior C2", data.estado_civil_c2 || 'N/A']
+        ["Estado Civil Anterior C1", data.estado_civil_c1 || 'N/A', false],
+        ["Estado Civil Anterior C2", data.estado_civil_c2 || 'N/A', false]
     ];
     
-    conyugeRows.forEach((row, index) => {
-        const startY = currentY + index * ROW_HEIGHT;
+    // --- MODIFICACIÓN CLAVE: DIBUJO DE CÓNYUGES CON AJUSTE DE ALTURA ---
+    conyugeRowsData.forEach((row, index) => {
+        const startY = currentY;
+        const isConyugeRow = index < 2; // Solo las dos primeras filas tienen el texto largo del cónyuge
+        const contentText = String(row[1]).toUpperCase();
         
+        // 1. Calcular altura de la fila
+        ctx.font = `bold 14px ${FONT_FAMILY}`;
+        let rowHeight;
+        let wrappedContent;
+        const contentWidth = INNER_WIDTH / 2 - 2 * CELL_PADDING;
+
+        if (isConyugeRow) {
+            wrappedContent = wrapText(ctx, contentText, contentWidth, LINE_HEIGHT);
+            // Altura de la fila: Altura del texto envuelto + doble padding vertical
+            rowHeight = Math.max(ROW_HEIGHT, wrappedContent.height + 2 * (CELL_PADDING - 5)); 
+        } else {
+            // Filas de estado civil, no deberían necesitar salto de línea, usamos altura mínima
+            rowHeight = ROW_HEIGHT;
+            wrappedContent = { lines: [contentText], height: LINE_HEIGHT }; 
+        }
+
+        // 2. Dibujar Fondos y Bordes
         ctx.fillStyle = BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X, startY, INNER_WIDTH / 2, ROW_HEIGHT);
-        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, INNER_WIDTH / 2, ROW_HEIGHT);
-        ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, ROW_HEIGHT);
+        ctx.fillRect(MARGIN_X, startY, INNER_WIDTH / 2, rowHeight);
+        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, INNER_WIDTH / 2, rowHeight);
+        ctx.strokeStyle = TABLE_BORDER_COLOR;
+        ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, rowHeight);
         ctx.beginPath();
         ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, startY);
-        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, startY + ROW_HEIGHT);
+        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, startY + rowHeight);
         ctx.stroke();
         
+        // 3. Dibujar Texto
+        const textYCenterOffset = rowHeight / 2 + 5; // Centro vertical para texto de una línea (si no hay wrap)
+
+        // Columna 1 (Etiqueta de Rol)
         ctx.fillStyle = COLOR_TEXT;
         ctx.font = `14px ${FONT_FAMILY}`;
-        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + ROW_HEIGHT / 2 + 5);
-        ctx.fillText(String(row[1]).toUpperCase(), MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + ROW_HEIGHT / 2 + 5);
+        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + textYCenterOffset);
+        
+        // Columna 2 (Contenido - Texto largo con Salto de Línea)
+        ctx.fillStyle = COLOR_TEXT;
+        ctx.font = `bold 14px ${FONT_FAMILY}`;
+        
+        if (isConyugeRow) {
+            // Dibuja las líneas ajustadas
+            wrappedContent.lines.forEach((line, i) => {
+                // Calcular Y para centrar el bloque de texto verticalmente
+                const lineY = startY + (rowHeight / 2) - (wrappedContent.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5;
+                ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, lineY);
+            });
+        } else {
+            // Sin ajuste de línea, centrado verticalmente normal
+            ctx.fillText(wrappedContent.lines[0], MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + textYCenterOffset);
+        }
+
+        currentY += rowHeight;
     });
 
-    currentY += conyugeRows.length * ROW_HEIGHT;
+    // --- FIN MODIFICACIÓN CLAVE ---
     
     // 5. SECCIÓN 3: Orden del Día (Observaciones)
     currentY += 30;
@@ -874,22 +919,17 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     const obsText = data.observaciones || 'NO HAY OBSERVACIONES ADICIONALES REGISTRADAS EN ESTA ACTA.';
     
     // Wrap text para las observaciones
-    const words = obsText.split(' ');
-    let line = '';
+    const obsWrapped = wrapText(ctx, obsText, INNER_WIDTH - 2 * CELL_PADDING, LINE_HEIGHT);
     let textY = currentY + CELL_PADDING + 5;
-    
-    for (let i = 0; i < words.length; i++) {
-        const testLine = line + words[i] + ' ';
-        if (ctx.measureText(testLine).width > INNER_WIDTH - 2 * CELL_PADDING && i > 0) {
+
+    obsWrapped.lines.forEach(line => {
+        // Asegurarse de no exceder el espacio de la celda de observación
+        if (textY < currentY + observationHeight - 5) { 
             ctx.fillText(line.trim(), MARGIN_X + CELL_PADDING, textY);
-            line = words[i] + ' ';
             textY += LINE_HEIGHT;
-        } else {
-            line = testLine;
         }
-    }
-    ctx.fillText(line.trim(), MARGIN_X + CELL_PADDING, textY);
-    
+    });
+
     currentY += observationHeight;
 
     // 6. Pie de Página (Simulación de Firmas)
