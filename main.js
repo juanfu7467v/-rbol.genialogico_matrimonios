@@ -269,6 +269,7 @@ const ROW_TITLE_HEIGHT = 30; // Altura para el título de la capa (ej: "Padres")
 
 /**
  * Obtiene el color de fondo de la caja basado en el parentesco (imitando el diseño de la imagen).
+ * MODIFICADO: Devuelve el color del BORDE.
  */
 const getBoxColorByParentesco = (parentescoText, isPrincipal) => {
     if (isPrincipal) {
@@ -295,13 +296,14 @@ const getBoxColorByParentesco = (parentescoText, isPrincipal) => {
     }
     // Otros: Gris
     else {
-        return '#9E9E9E'; // Gris - OTROS
+        return '#9E9E9E'; // Gris - OTROS/CUÑADOS
     }
 };
 
 
 /**
  * Dibuja un nodo (caja) en el Árbol Genealógico, imitando el estilo de la imagen subida.
+ * MODIFICADO: El borde se ha engrosado a 4px.
  */
 const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     
@@ -319,7 +321,7 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     
     // 3. Dibuja el Borde (con el color de parentesco)
     ctx.strokeStyle = boxColor;
-    ctx.lineWidth = 4; // Un borde más grueso para que destaque
+    ctx.lineWidth = 4; // MODIFICACIÓN: Borde más grueso (el doble de 2px)
     ctx.strokeRect(x, y, TREE_NODE_WIDTH, TREE_NODE_HEIGHT);
     
     // 4. Dibujar Texto (Simulando la estructura interna de la caja)
@@ -358,7 +360,7 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, parentesco) => {
     // Columna 2 (Valor Nombre)
     ctx.font = `14px ${FONT_FAMILY}`;
     ctx.fillStyle = textColor; // Valor en negro
-    // Usar la mitad del ancho para el nombre
+    // Usar la mitad del ancho para el nombre (y truncar si es muy largo)
     let nomDisplay = nomPart.length > 15 ? nomPart.substring(0, 15) + '...' : nomPart;
     ctx.fillText(nomDisplay, x + PADDING + QUARTER_WIDTH, y + 55, HALF_WIDTH - QUARTER_WIDTH - PADDING); 
     
@@ -677,6 +679,7 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     // --- 5. ESPECIFICACIÓN DE COLORES (LEYENDA) ---
     currentY += VERTICAL_SPACING / 2; // Espacio final antes de la leyenda
     
+    // MODIFICADO: Colores de la leyenda para que coincidan con los nuevos bordes.
     const legendData = [
         { color: '#00B8D4', text: 'PRINCIPAL (DNI consultado)' },
         { color: '#FFAB00', text: 'PADRES / MADRES' },
@@ -715,7 +718,7 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         ctx.fillStyle = BACKGROUND_COLOR; // Fondo blanco para la caja
         ctx.fillRect(itemX, itemY - LEGEND_BOX_SIZE / 2, LEGEND_BOX_SIZE, LEGEND_BOX_SIZE);
         ctx.strokeStyle = item.color;
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 4; // Borde de la leyenda más grueso
         ctx.strokeRect(itemX, itemY - LEGEND_BOX_SIZE / 2, LEGEND_BOX_SIZE, LEGEND_BOX_SIZE);
         
         // Dibujar el texto
