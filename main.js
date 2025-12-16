@@ -686,14 +686,14 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     const infoCol3Width = 180;
     const infoCol4Width = INNER_WIDTH / 2 - infoCol3Width;
 
-    // Campos a los que se aplica el ajuste de texto y estiramiento de fila
+    // Campos que tienen más probabilidades de requerir ajuste de texto y estiramiento de fila
     const wrapFieldsIndices = [1, 2, 3]; // Índice de las filas con texto largo: Oficina, Departamento, Distrito
 
     rawInfoData.forEach((row, rowIndex) => {
         let rowHeight = MIN_ROW_HEIGHT;
         let startY = currentY;
 
-        // --- 1. PREPARACIÓN Y CÁLCULO DE ALTURA DE FILA ---
+        // --- 1. PREPARACIÓN Y CÁLCULO DE ALTURA DE FILA (MODIFICADO) ---
         ctx.font = `bold 14px ${FONT_FAMILY}`;
         const shouldWrap = wrapFieldsIndices.includes(rowIndex);
 
@@ -701,14 +701,15 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         let wrappedCol4 = { lines: [String(row[3]).toUpperCase()], height: LINE_HEIGHT }; // Inicializado con altura de 1 línea
 
         if (shouldWrap) {
-            // Columna 2: Oficina de Registro, Departamento
+            // Columna 2: Oficina de Registro, Departamento, Distrito
             wrappedCol2 = wrapText(ctx, String(row[1]).toUpperCase(), infoCol2Width - 2 * CELL_PADDING, LINE_HEIGHT);
-            // Columna 4: Nro. de Acta, Provincia
+            // Columna 4: Nro. de Acta, Provincia, Régimen Patrimonial
             wrappedCol4 = wrapText(ctx, String(row[3]).toUpperCase(), infoCol4Width - 2 * CELL_PADDING, LINE_HEIGHT);
             
             // La altura de la fila es determinada por el texto más largo + un padding de celda.
             const maxTextHeight = Math.max(wrappedCol2.height, wrappedCol4.height);
-            rowHeight = Math.max(MIN_ROW_HEIGHT, maxTextHeight + 2 * (CELL_PADDING - 5));
+            // El padding vertical debe ser al menos 2 * (CELL_PADDING - 5) para los textos envueltos
+            rowHeight = Math.max(MIN_ROW_HEIGHT, maxTextHeight + 2 * (CELL_PADDING - 5)); 
         }
 
         // --- 2. DIBUJO DE LA FILA (FONDOS Y BORDES) ---
@@ -746,42 +747,38 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         ctx.stroke();
 
         // --- 3. DIBUJO DE TEXTO ---
-        const textYCenterOffset = rowHeight / 2 + 5; // Centro vertical para texto de una línea
+        // Offset base para centrado vertical: 5px es la mitad de la altura de la fuente (14px) + un pequeño ajuste visual
+        const textYCenterOffset = 5; 
 
         // Columna 1 (Etiqueta 1)
         ctx.fillStyle = TABLE_HEADER_COLOR;
         ctx.font = `14px ${FONT_FAMILY}`;
-        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + textYCenterOffset);
+        // Centrado: Altura de la fila / 2 - Altura del texto / 2 + Altura de línea de texto / 2 + ajuste
+        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + rowHeight / 2 + textYCenterOffset);
         
         // Columna 3 (Etiqueta 2)
         ctx.fillStyle = TABLE_HEADER_COLOR;
         ctx.font = `14px ${FONT_FAMILY}`;
-        ctx.fillText(row[2], MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + textYCenterOffset);
+        ctx.fillText(row[2], MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + rowHeight / 2 + textYCenterOffset);
 
         // Columna 2 (Valor 1 - Ajuste de Texto)
         ctx.fillStyle = COLOR_TEXT;
         ctx.font = `bold 14px ${FONT_FAMILY}`;
-        if (shouldWrap) {
-            // Usar la posición centrada ajustada por la altura total del texto envuelto
-            wrappedCol2.lines.forEach((line, i) => {
-                const lineY = startY + (rowHeight / 2) - (wrappedCol2.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5;
-                ctx.fillText(line, MARGIN_X + infoCol1Width + CELL_PADDING, lineY);
-            });
-        } else {
-            ctx.fillText(wrappedCol2.lines[0], MARGIN_X + infoCol1Width + CELL_PADDING, startY + textYCenterOffset);
-        }
+        // El punto de inicio del texto debe centrar el BLOQUE COMPLETO de texto
+        const blockYStartCol2 = startY + (rowHeight / 2) - (wrappedCol2.height / 2);
+        wrappedCol2.lines.forEach((line, i) => {
+            const lineY = blockYStartCol2 + (i * LINE_HEIGHT) + textYCenterOffset; // +5 para centrado visual
+            ctx.fillText(line, MARGIN_X + infoCol1Width + CELL_PADDING, lineY);
+        });
         
         // Columna 4 (Valor 2 - Ajuste de Texto)
         ctx.fillStyle = COLOR_TEXT;
         ctx.font = `bold 14px ${FONT_FAMILY}`;
-        if (shouldWrap) {
-            wrappedCol4.lines.forEach((line, i) => {
-                const lineY = startY + (rowHeight / 2) - (wrappedCol4.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5;
-                ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, lineY);
-            });
-        } else {
-            ctx.fillText(wrappedCol4.lines[0], MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, startY + textYCenterOffset);
-        }
+        const blockYStartCol4 = startY + (rowHeight / 2) - (wrappedCol4.height / 2);
+        wrappedCol4.lines.forEach((line, i) => {
+            const lineY = blockYStartCol4 + (i * LINE_HEIGHT) + textYCenterOffset; // +5 para centrado visual
+            ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, lineY);
+        });
 
         currentY += rowHeight;
     });
@@ -822,8 +819,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     const conyugeRowsData = [
         ["Cónyuge Principal (1)", `${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno} (DNI: ${conyuge1.dni})`],
         ["Cónyuge Pareja (2)", `${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno} (DNI: ${conyuge2.dni})`],
-        ["Estado Civil Anterior C1", data.estado_civil_c1 || 'N/A', false],
-        ["Estado Civil Anterior C2", data.estado_civil_c2 || 'N/A', false]
+        ["Estado Civil Anterior C1", data.estado_civil_c1 || 'N/A'],
+        ["Estado Civil Anterior C2", data.estado_civil_c2 || 'N/A']
     ];
     
     // --- MODIFICACIÓN CLAVE: DIBUJO DE CÓNYUGES CON AJUSTE DE ALTURA ---
@@ -850,8 +847,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
 
         // 2. Dibujar Fondos y Bordes
         ctx.fillStyle = BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X, startY, INNER_WIDTH / 2, rowHeight);
-        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, INNER_WIDTH / 2, rowHeight);
+        ctx.fillRect(MARGIN_X, startY, INNER_WIDTH / 2, rowHeight); // Columna 1
+        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, INNER_WIDTH / 2, rowHeight); // Columna 2
         ctx.strokeStyle = TABLE_BORDER_COLOR;
         ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, rowHeight);
         ctx.beginPath();
@@ -860,28 +857,24 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
         ctx.stroke();
         
         // 3. Dibujar Texto
-        const textYCenterOffset = rowHeight / 2 + 5; // Centro vertical para texto de una línea (si no hay wrap)
+        const textYCenterOffset = 5; // Offset base para centrado vertical
+        const blockYStart = startY + (rowHeight / 2) - (wrappedContent.height / 2);
 
         // Columna 1 (Etiqueta de Rol)
         ctx.fillStyle = COLOR_TEXT;
         ctx.font = `14px ${FONT_FAMILY}`;
-        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + textYCenterOffset);
+        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + rowHeight / 2 + textYCenterOffset);
         
         // Columna 2 (Contenido - Texto largo con Salto de Línea)
         ctx.fillStyle = COLOR_TEXT;
         ctx.font = `bold 14px ${FONT_FAMILY}`;
         
-        if (isConyugeRow) {
-            // Dibuja las líneas ajustadas
-            wrappedContent.lines.forEach((line, i) => {
-                // Calcular Y para centrar el bloque de texto verticalmente
-                const lineY = startY + (rowHeight / 2) - (wrappedContent.height / 2) + (i * LINE_HEIGHT) + (LINE_HEIGHT/2) + 5;
-                ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, lineY);
-            });
-        } else {
-            // Sin ajuste de línea, centrado verticalmente normal
-            ctx.fillText(wrappedContent.lines[0], MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + textYCenterOffset);
-        }
+        // Dibuja las líneas ajustadas
+        wrappedContent.lines.forEach((line, i) => {
+            // Calcular Y para centrar el bloque de texto verticalmente
+            const lineY = blockYStart + (i * LINE_HEIGHT) + textYCenterOffset; // +5 para centrado visual
+            ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, lineY);
+        });
 
         currentY += rowHeight;
     });
@@ -920,7 +913,10 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     
     // Wrap text para las observaciones
     const obsWrapped = wrapText(ctx, obsText, INNER_WIDTH - 2 * CELL_PADDING, LINE_HEIGHT);
-    let textY = currentY + CELL_PADDING + 5;
+    
+    // Calcular la posición inicial Y para centrar el bloque de texto
+    const obsBlockYStart = currentY + (observationHeight / 2) - (obsWrapped.height / 2);
+    let textY = obsBlockYStart + 5; // +5 para ajuste visual
 
     obsWrapped.lines.forEach(line => {
         // Asegurarse de no exceder el espacio de la celda de observación
