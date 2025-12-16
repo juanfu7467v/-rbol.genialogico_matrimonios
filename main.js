@@ -244,6 +244,29 @@ const getFormattedPersonData = (data) => {
     };
 };
 
+/**
+ * Función para limpiar el valor antes de mostrarlo, reemplazando N/A.
+ * @param {string|number|null} value - El valor a limpiar.
+ * @returns {string} El valor formateado o '...' si es inválido.
+ */
+const cleanValueForDisplay = (value) => {
+    // Convierte a string, lo pone en mayúsculas y quita espacios
+    const clean = String(value || '').toUpperCase().trim();
+    
+    // Reemplaza valores nulos, vacíos o "N/A"
+    if (!clean || clean === 'N/A' || clean === 'N/ A' || clean === 'NULL' || clean === 'UNDEFINED') {
+        return ''; // Deja vacío
+        // return '[...]'; // O si prefiere tres puntos
+    }
+    
+    // Si la cadena es muy larga, la acorta y añade puntos
+    if (clean.length > 50) {
+        return clean.substring(0, 50) + '...';
+    }
+    
+    return clean;
+};
+
 
 // ==============================================================================
 //  FUNCIONES DE DIBUJO (ÁRBOL GENEALÓGICO)
@@ -287,7 +310,7 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, type = 'Familiar') => {
 
     // 2. Dibujar Texto
     const formattedData = getFormattedPersonData(data);
-    const fullName = `${formattedData.nombres} ${formattedData.apellido_paterno} ${formattedData.apellido_materno}`.trim();
+    const fullName = `${cleanValueForDisplay(formattedData.nombres)} ${cleanValueForDisplay(formattedData.apellido_paterno)} ${cleanValueForDisplay(formattedData.apellido_materno)}`.trim();
     const parentescoText = isPrincipal ? 'PRINCIPAL' : (data.parentesco || type).toUpperCase().replace('N/A', 'FAMILIAR');
 
     ctx.fillStyle = textColor;
@@ -307,7 +330,7 @@ const drawTreeNode = (ctx, data, x, y, isPrincipal, type = 'Familiar') => {
     
     // DNI
     ctx.font = `14px ${FONT_FAMILY}`;
-    ctx.fillText(`DNI: ${formattedData.dni}`, x + TREE_NODE_WIDTH / 2, y + 80);
+    ctx.fillText(`DNI: ${cleanValueForDisplay(formattedData.dni)}`, x + TREE_NODE_WIDTH / 2, y + 80);
     
     // Retorna el centro del nodo para las conexiones
     return {
@@ -579,49 +602,54 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
 
 /**
  * Dibuja la imagen del Acta de Matrimonio.
+ * * **MODIFICADO** para cumplir con los requisitos del usuario:
+ * - Fondo degradado azul/verde.
+ * - Sin bordes de imagen.
+ * - Reemplazo de 'N/A' por string vacío (limpio) o '[...]' si se prefiere (dejado vacío por defecto).
+ * - Diseño tabular con textos claros.
+ * - Fondo estirado a la altura del contenedor.
  */
 const generateMarriageCertificateImage = async (rawDocumento, principal, data) => {
     
-    const API_NAME = "MATRIMONIOS"; // Actualizado a 'MATRIMONIOS'
+    const API_NAME = "MATRIMONIOS"; 
     const CANVAS_WIDTH = 800;
     const CANVAS_HEIGHT = 1000;
     const MARGIN_X = 50;
     const MARGIN_Y = 50;
     const INNER_WIDTH = CANVAS_WIDTH - 2 * MARGIN_X;
-    const TABLE_START_Y = 400; // Posición de inicio de la tabla
     const CELL_PADDING = 10;
     
     // 1. Generación del Canvas
     const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     const ctx = canvas.getContext("2d");
 
-    // Fondo (Simulación de papel formal)
+    // Fondo base (color que simula papel formal)
     ctx.fillStyle = '#F5F5DC'; // Beige claro
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // --- NUEVO: Degradado de nube azul-verde en el centro ---
+    // --- NUEVO: Degradado de nube azul-verde en el centro (Cumple con el requisito de degradado) ---
+    // Se ajusta el tamaño del degradado para que ocupe todo el alto/ancho del canvas
     const cloudGradient = ctx.createRadialGradient(
         CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 0, // Punto central de inicio
-        CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH * 0.4 // Punto central de fin
+        CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH * 0.8 // Punto central de fin (más grande para cubrir)
     );
-    cloudGradient.addColorStop(0, 'rgba(0, 128, 128, 0.1)'); // Verde azulado semitransparente
-    cloudGradient.addColorStop(0.5, 'rgba(0, 128, 255, 0.05)'); // Azul semitransparente
-    cloudGradient.addColorStop(1, 'rgba(245, 245, 220, 0.0)'); // Transparente hacia el borde
+    // Azul claro a verde azulado (con baja opacidad)
+    cloudGradient.addColorStop(0, 'rgba(0, 128, 255, 0.1)'); // Azul claro semitransparente
+    cloudGradient.addColorStop(0.5, 'rgba(0, 128, 128, 0.15)'); // Verde azulado semitransparente
+    cloudGradient.addColorStop(1, 'rgba(0, 128, 128, 0.05)'); // Casi transparente
     
     ctx.fillStyle = cloudGradient;
-    ctx.beginPath();
-    // Dibuja un círculo grande para simular una nube
-    ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    // --------------------------------------------------------
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Cubre todo el canvas con el degradado
+    // -----------------------------------------------------------------------------------------------
 
-    // Borde Decorativo (Simulación de sello/marco oficial)
+    // Borde Decorativo Interno (Simulación de sello/marco oficial)
+    // Se elimina el borde externo del canvas, dejando solo el marco decorativo interno.
     ctx.strokeStyle = '#8B0000'; // Rojo oscuro (Gobierno/Oficial)
     ctx.lineWidth = 15;
-    ctx.strokeRect(10, 10, CANVAS_WIDTH - 20, CANVAS_HEIGHT - 20);
+    ctx.strokeRect(15, 15, CANVAS_WIDTH - 30, CANVAS_HEIGHT - 30); // Marco más interno
     ctx.strokeStyle = '#4A148C'; // Púrpura oscuro
     ctx.lineWidth = 3;
-    ctx.strokeRect(MARGIN_X - 10, MARGIN_Y - 10, INNER_WIDTH + 20, CANVAS_HEIGHT - 2 * MARGIN_Y + 20);
+    ctx.strokeRect(MARGIN_X - 10, MARGIN_Y - 10, INNER_WIDTH + 20, CANVAS_HEIGHT - 2 * MARGIN_Y + 20); // Marco intermedio
 
     // 2. Encabezado Oficial
     ctx.fillStyle = '#000000';
@@ -639,18 +667,18 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     currentY += 40;
     ctx.fillStyle = '#8B0000';
     ctx.font = `bold 40px serif`;
-    ctx.fillText(API_NAME.toUpperCase(), CANVAS_WIDTH / 2, currentY); // Usamos 'MATRIMONIOS'
-    currentY += 20; // Espacio después del título principal
+    ctx.fillText("ACTA DE MATRIMONIO", CANVAS_WIDTH / 2, currentY); 
+    currentY += 20; 
 
     // 3. Datos de Registro (Fuera de la tabla principal)
     currentY += 20;
     ctx.fillStyle = '#333333';
     ctx.textAlign = 'left';
     ctx.font = `italic 18px ${FONT_FAMILY}`;
-    ctx.fillText(`REGISTRO ÚNICO DE IDENTIFICACIÓN: ${data.registro_unico || 'N/A'}`, MARGIN_X + 10, currentY);
+    ctx.fillText(`REGISTRO ÚNICO DE IDENTIFICACIÓN: ${cleanValueForDisplay(data.registro_unico) || '[...]'}`, MARGIN_X + 10, currentY);
     
     currentY += 30;
-    ctx.fillText(`NÚMERO: ${data.nro_acta || 'N/A'}`, MARGIN_X + 10, currentY);
+    ctx.fillText(`NÚMERO: ${cleanValueForDisplay(data.nro_acta) || '[...]'}`, MARGIN_X + 10, currentY);
     
     // Línea divisoria
     currentY += 15;
@@ -668,8 +696,8 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     const col1Width = 220; // Ancho de la columna de etiquetas
     const col2Width = INNER_WIDTH - col1Width; // Ancho de la columna de valores
     const rowHeight = 35;
-    const borderColor = '#CCCCCC';
-    const headerColor = '#ECEFF1'; // Gris muy claro
+    const borderColor = '#4A148C'; // Usamos el púrpura del marco
+    const headerColor = '#D1C4E9'; // Púrpura muy claro
     
     const rows = [];
     
@@ -680,36 +708,37 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     // Función para añadir una fila a la estructura de la tabla
     const addRow = (label, value, isHeader = false) => {
         rows.push({ 
-            label: isHeader ? label.replace(/\*\*/g, '').trim() : label, 
-            value: isHeader ? '' : (String(value).toUpperCase() || 'N/A'), 
+            label: label, 
+            value: cleanValueForDisplay(value), // Usamos la función de limpieza
             isHeader 
         });
     };
 
     // --- Detalles del Matrimonio ---
     addRow("DETALLES DEL MATRIMONIO", '', true);
-    addRow("FECHA DE MATRIMONIO", data.fecha_matrimonio || 'N/A');
-    addRow("LUGAR DE MATRIMONIO", `${data.departamento || ''}, ${data.provincia || ''}, ${data.distrito || ''}`.trim().replace(/^, | ,$|, ,/g, ' - ') || 'N/A');
-    addRow("OFICINA DE REGISTRO", data.oficina_registro || 'N/A');
+    addRow("FECHA DEL ACTO", data.fecha_matrimonio);
+    addRow("LUGAR DEL ACTO", `${data.departamento || ''}, ${data.provincia || ''}, ${data.distrito || ''}`.trim().replace(/^, | ,$|, ,/g, ' - '));
+    addRow("OFICINA DE REGISTRO", data.oficina_registro);
 
     // --- Cónyuge 1 (Principal) ---
-    addRow("CÓNYUGE 1 (PRINCIPAL)", '', true);
-    addRow("DNI", conyuge1.dni);
-    addRow("NOMBRE COMPLETO", `${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno}`);
-    addRow("FECHA DE NACIMIENTO", principal.fecha_nacimiento || 'N/A');
-    addRow("ESTADO CIVIL ANTERIOR", data.estado_civil_c1 || 'N/A');
+    addRow("CÓNYUGE 1 (DATOS DEL TITULAR)", '', true);
+    addRow("DOCUMENTO DE IDENTIDAD", conyuge1.dni);
+    // Unir nombres completos y limpiarlos
+    addRow("NOMBRE COMPLETO", cleanValueForDisplay(`${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno}`));
+    addRow("FECHA DE NACIMIENTO", principal.fecha_nacimiento);
+    addRow("ESTADO CIVIL ANTERIOR", data.estado_civil_c1);
 
     // --- Cónyuge 2 (Pareja) ---
-    addRow("CÓNYUGE 2 (PAREJA)", '', true);
-    addRow("DNI", conyuge2.dni);
-    addRow("NOMBRE COMPLETO", `${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno}`);
-    addRow("FECHA DE NACIMIENTO", data.conyuge?.fecha_nacimiento || 'N/A');
-    addRow("ESTADO CIVIL ANTERIOR", data.estado_civil_c2 || 'N/A');
+    addRow("CÓNYUGE 2 (DATOS DE LA PAREJA)", '', true);
+    addRow("DOCUMENTO DE IDENTIDAD", conyuge2.dni);
+    addRow("NOMBRE COMPLETO", cleanValueForDisplay(`${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno}`));
+    addRow("FECHA DE NACIMIENTO", data.conyuge?.fecha_nacimiento);
+    addRow("ESTADO CIVIL ANTERIOR", data.estado_civil_c2);
     
     // --- Información Adicional ---
-    addRow("INFORMACIÓN ADICIONAL", '', true);
-    addRow("RÉGIMEN PATRIMONIAL", data.regimen_patrimonial || 'N/A');
-    addRow("OBSERVACIONES", data.observaciones || 'N/A');
+    addRow("INFORMACIÓN LEGAL Y ADICIONAL", '', true);
+    addRow("RÉGIMEN PATRIMONIAL", data.regimen_patrimonial);
+    addRow("OBSERVACIONES (TEXTO LARGO)", data.observaciones);
 
     // Dibuja la Tabla
     let currentTableY = tableY;
@@ -738,15 +767,46 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
 
         // Texto de la Columna 1 (Etiqueta)
         ctx.fillStyle = row.isHeader ? '#4A148C' : '#333333'; // Púrpura para encabezados, negro para etiquetas
-        ctx.font = row.isHeader ? `bold 18px ${FONT_FAMILY}` : `bold 16px ${FONT_FAMILY}`;
+        ctx.font = row.isHeader ? `bold 16px ${FONT_FAMILY}` : `bold 14px ${FONT_FAMILY}`;
         ctx.textAlign = 'left';
         ctx.fillText(row.label, tableX + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
 
         // Texto de la Columna 2 (Valor)
         if (!row.isHeader) {
             ctx.fillStyle = '#000000';
-            ctx.font = `16px ${FONT_FAMILY}`;
-            ctx.fillText(row.value, tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
+            ctx.font = `14px ${FONT_FAMILY}`;
+            
+            // Lógica de salto de línea simple si el texto es demasiado largo para una línea
+            const textToDisplay = row.value || '[...]';
+            const maxTextWidth = col2Width - 2 * CELL_PADDING;
+            
+            if (ctx.measureText(textToDisplay).width > maxTextWidth) {
+                // Si excede, muestra solo una parte y usa una fuente más pequeña para intentar encajar
+                ctx.font = `12px ${FONT_FAMILY}`;
+                const lines = [];
+                let currentLine = '';
+                const words = textToDisplay.split(' ');
+                
+                for (const word of words) {
+                    const testLine = currentLine + word + ' ';
+                    if (ctx.measureText(testLine).width > maxTextWidth && currentLine.length > 0) {
+                        lines.push(currentLine.trim());
+                        currentLine = word + ' ';
+                    } else {
+                        currentLine = testLine;
+                    }
+                }
+                lines.push(currentLine.trim());
+
+                if (lines.length === 1) {
+                    ctx.fillText(lines[0], tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
+                } else if (lines.length > 1) {
+                    // Si son dos o más líneas, solo muestra la primera para no salir del espacio, o muestra '[...] Texto largo'
+                    ctx.fillText(lines[0].substring(0, 30) + '...', tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
+                }
+            } else {
+                ctx.fillText(textToDisplay, tableX + col1Width + CELL_PADDING, currentTableY + rowHeight / 2 + 5);
+            }
         }
         
         currentTableY += rowHeight;
@@ -788,7 +848,7 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
     ctx.fillStyle = '#000000';
     ctx.font = `12px ${FONT_FAMILY}`;
     ctx.textAlign = 'right';
-    ctx.fillText(`Generado por ${API_NAME} el: ${new Date().toLocaleDateString('es-ES')}`, CANVAS_WIDTH - MARGIN_X, footerY);
+    ctx.fillText(`Generado por ACTA DE MATRIMONIO el: ${new Date().toLocaleDateString('es-ES')}`, CANVAS_WIDTH - MARGIN_X, footerY);
 
     return canvas.toBuffer('image/png');
 };
