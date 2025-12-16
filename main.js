@@ -265,7 +265,7 @@ const TREE_NODE_WIDTH = (INNER_WIDTH - (MAX_COLUMNS - 1) * HORIZONTAL_SPACING) /
 const TREE_NODE_HEIGHT = 120; // Aumentamos la altura para acomodar 4 líneas de texto
 const VERTICAL_SPACING = 100; 
 const ROW_TITLE_HEIGHT = 30; // Altura para el título de la capa (ej: "Padres")
-
+const FOOTER_HEIGHT = 150; // MODIFICADO: Reducido para dejar menos espacio fijo al final.
 
 /**
  * Obtiene el color de fondo de la caja basado en el parentesco (imitando el diseño de la imagen).
@@ -406,8 +406,8 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     
     const API_NAME = "ARBOL GENEALOGICO";
     const HEADER_HEIGHT = 100;
-    const FOOTER_HEIGHT = 200; // Espacio para la Leyenda y Pie de página
-
+    // La altura del FOOTER_HEIGHT ahora es solo una reserva inicial
+    
     // --- 1. PROCESAMIENTO Y AGRUPAMIENTO DE NODOS ---
     const nodes = {
         principal: principal,
@@ -464,8 +464,15 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         totalDrawingHeight += VERTICAL_SPACING; 
     });
     
-    // Altura total del Canvas: Margen Superior + Título + Línea + Alto de Dibujo + Margen Inferior/Leyenda
-    const FINAL_CANVAS_HEIGHT = MARGIN * 2 + HEADER_HEIGHT + totalDrawingHeight + FOOTER_HEIGHT;
+    // Altura del área de Leyenda y Pie (MODIFICACIÓN CLAVE: Calculado en lugar de constante grande)
+    const LEGEND_LINE_HEIGHT = 25;
+    const LEGEND_ITEMS_COUNT = 7; 
+    const LEGEND_ROWS = Math.ceil(LEGEND_ITEMS_COUNT / 2); // Leyenda en 2 columnas
+    const legendTotalHeight = 30 + (LEGEND_ROWS * LEGEND_LINE_HEIGHT) + 20 + 70; // Título Leyenda + Filas de leyenda + Espacio de margen + Pie de página
+    
+
+    // Altura total del Canvas: Margen Superior + Título + Línea + Alto de Dibujo + Alto Leyenda + Margen Inferior
+    const FINAL_CANVAS_HEIGHT = MARGIN + HEADER_HEIGHT + totalDrawingHeight + legendTotalHeight + MARGIN; 
 
     // --- 3. GENERACIÓN DEL CANVAS ---
     const canvas = createCanvas(CANVAS_WIDTH_ARBOL, FINAL_CANVAS_HEIGHT);
@@ -492,7 +499,7 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     ctx.lineTo(CANVAS_WIDTH_ARBOL - MARGIN, titleY + 50);
     ctx.stroke();
     
-    let currentY = MARGIN + HEADER_HEIGHT;
+    let currentY = MARGIN + HEADER_HEIGHT; // Empieza debajo del encabezado
     
     const nodeCenters = {
         principal: null,
@@ -524,7 +531,8 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         
         // 4.2. Dibujar los Nodos de la Capa (Envolviendo en filas de 3)
         const numNodes = currentLayerNodes.length;
-        const numLayerRows = Math.ceil(numNodes / MAX_COLUMNS);
+        
+        // Obtener la Y inicial de la fila
         let rowYStart = currentY;
 
         for (let i = 0; i < numNodes; i++) {
@@ -676,7 +684,7 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     });
     
     // --- 5. ESPECIFICACIÓN DE COLORES (LEYENDA) ---
-    currentY += VERTICAL_SPACING / 2; // Espacio final antes de la leyenda
+    currentY += VERTICAL_SPACING / 4; // Espacio final antes de la leyenda (reducido)
     
     // MODIFICACIÓN: Leyenda con los nuevos colores y separando Hijos y Sobrinos
     const legendData = [
@@ -692,7 +700,7 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
     const legendX = MARGIN;
     let legendY = currentY + 10; 
     const LEGEND_BOX_SIZE = 18;
-    const LEGEND_LINE_HEIGHT = 25;
+    // const LEGEND_LINE_HEIGHT = 25; // Ya definida arriba
 
     ctx.fillStyle = COLOR_TITLE;
     ctx.font = `bold 18px ${FONT_FAMILY}`;
@@ -726,14 +734,15 @@ const generateGenealogyTreeImage = async (rawDocumento, principal, familiares) =
         ctx.fillStyle = COLOR_TEXT;
         ctx.fillText(item.text, itemX + LEGEND_BOX_SIZE + 10, itemY + 5);
         
-        // Ajustar el alto de la leyenda si pasa a la siguiente fila
-        if (col === 1 && index === legendData.length - 1) {
-             legendY = itemY;
+        // El nuevo 'currentY' debe ser después de la última fila de la leyenda
+        if (index === legendData.length - 1) {
+             currentY = itemY;
         }
     });
 
     // Pie de Página
-    const footerY = FINAL_CANVAS_HEIGHT - MARGIN / 2;
+    const footerY = currentY + 50; // MODIFICADO: Ahora el pie de página se ubica dinámicamente
+    
     ctx.fillStyle = COLOR_SECONDARY_TEXT;
     ctx.font = `14px ${FONT_FAMILY}`;
     ctx.textAlign = 'left';
