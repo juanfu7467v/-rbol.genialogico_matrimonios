@@ -280,11 +280,11 @@ const wrapTextPDF = (text, maxWidth, fontSize, doc) => {
 };
 
 // ==============================================================================
-//  FUNCIONES DE GENERACIÓN DE PDF (ÁRBOL GENEALÓGICO)
+//  FUNCIONES DE GENERACIÓN DE PDF (ÁRBOL GENEALÓGICO) - MODIFICADA
 // ==============================================================================
 
 /**
- * Genera el PDF del Árbol Genealógico con información paterna y materna en hojas separadas.
+ * Genera el PDF del Árbol Genealógico siguiendo el diseño de la imagen subida.
  */
 const generateGenealogyTreePDF = async (rawDocumento, principal, familiares) => {
     // Crear un nuevo documento PDF
@@ -318,96 +318,258 @@ const generateGenealogyTreePDF = async (rawDocumento, principal, familiares) => 
     // --- PÁGINA 1: FAMILIA PATERNA ---
     doc.addPage();
     
-    // Título
+    // Encabezado similar al diseño de la imagen
     doc.fontSize(24)
        .font('Helvetica-Bold')
+       .fillColor('#000000')
        .text('ÁRBOL GENEALÓGICO', { align: 'center' })
-       .moveDown(0.5);
-
+       .moveDown(0.3);
+    
     doc.fontSize(16)
        .font('Helvetica')
+       .fillColor('#333333')
        .text(`Familia Paterna - DNI: ${rawDocumento}`, { align: 'center' })
-       .moveDown(1);
+       .moveDown(1.5);
 
-    // Información del Principal
+    // Información del Principal (Tabla similar a la imagen)
     const principalData = getFormattedPersonData(principal);
-    doc.fontSize(14)
+    
+    // Primera tabla: Información (Leyenda)
+    doc.fontSize(18)
        .font('Helvetica-Bold')
-       .text('PERSONA PRINCIPAL:', { underline: true })
-       .moveDown(0.3);
-
-    doc.fontSize(12)
-       .font('Helvetica')
-       .text(`Nombre: ${principalData.nombres}`)
-       .text(`Apellidos: ${principalData.apellido_paterno} ${principalData.apellido_materno}`)
-       .text(`DNI: ${principalData.dni}`)
-       .moveDown(1);
-
-    // Tabla de Familiares Paternos
-    doc.fontSize(14)
-       .font('Helvetica-Bold')
-       .text('FAMILIARES PATERNA:', { underline: true })
+       .fillColor('#000000')
+       .text('Información', { underline: true })
        .moveDown(0.5);
 
-    // Encabezados de la tabla
-    const tableTop = doc.y;
-    const tableLeft = 50;
-    const columnWidths = [150, 150, 100, 150];
+    // Definir dimensiones de la tabla
+    const tableWidth = 500;
+    const tableLeft = (doc.page.width - tableWidth) / 2;
+    const rowHeight = 30;
+    const cellPadding = 10;
+    let currentY = doc.y;
+
+    // Leyenda de colores (similar a la tabla de información de la imagen)
+    const leyendaData = [
+        { color: '#00B8D4', texto: 'PRINCIPAL (DNI consultado)' },
+        { color: '#FFAB00', texto: 'PADRES / MADRES' },
+        { color: '#64DD17', texto: 'HERMANOS / HERMANAS' },
+        { color: '#D32F2F', texto: 'TÍOS / TÍAS / PRIMOS / PRIMAS' },
+        { color: '#3F51B5', texto: 'HIJOS / HIJAS' },
+        { color: '#7B1FA2', texto: 'SOBRINOS / SOBRINAS' },
+        { color: '#9E9E9E', texto: 'OTROS FAMILIARES / CUÑADOS' }
+    ];
+
+    // Dibujar tabla de leyenda
+    doc.fontSize(12);
     
-    // Encabezados
-    doc.fontSize(10)
-       .font('Helvetica-Bold')
-       .fillColor('#333333')
-       .text('Parentesco', tableLeft, tableTop)
-       .text('Nombres', tableLeft + columnWidths[0], tableTop)
-       .text('DNI', tableLeft + columnWidths[0] + columnWidths[1], tableTop)
-       .text('Apellidos', tableLeft + columnWidths[0] + columnWidths[1] + columnWidths[2], tableTop);
-
-    // Línea de separación
-    doc.moveTo(tableLeft, tableTop + 15)
-       .lineTo(tableLeft + columnWidths.reduce((a, b) => a + b, 0), tableTop + 15)
+    // Encabezado de tabla
+    doc.fillColor('#F0F0F0')
+       .rect(tableLeft, currentY, tableWidth, rowHeight)
+       .fill();
+    
+    doc.strokeColor('#CCCCCC')
+       .rect(tableLeft, currentY, tableWidth, rowHeight)
        .stroke();
+    
+    doc.fillColor('#333333')
+       .font('Helvetica-Bold')
+       .text('Color', tableLeft + cellPadding, currentY + cellPadding)
+       .text('Significado', tableLeft + 150, currentY + cellPadding);
+    
+    currentY += rowHeight;
 
-    let currentY = tableTop + 25;
+    // Filas de la leyenda
+    leyendaData.forEach((item, index) => {
+        // Fondo alternado para mejor legibilidad
+        if (index % 2 === 0) {
+            doc.fillColor('#FFFFFF')
+               .rect(tableLeft, currentY, tableWidth, rowHeight)
+               .fill();
+        } else {
+            doc.fillColor('#F9F9F9')
+               .rect(tableLeft, currentY, tableWidth, rowHeight)
+               .fill();
+        }
+        
+        doc.strokeColor('#CCCCCC')
+           .rect(tableLeft, currentY, tableWidth, rowHeight)
+           .stroke();
 
-    // Filas de la tabla
+        // Dibujar cuadrado de color
+        doc.fillColor(item.color)
+           .rect(tableLeft + cellPadding, currentY + cellPadding - 5, 15, 15)
+           .fill();
+        
+        doc.strokeColor(item.color)
+           .rect(tableLeft + cellPadding, currentY + cellPadding - 5, 15, 15)
+           .stroke();
+
+        // Texto de la leyenda
+        doc.fillColor('#000000')
+           .font('Helvetica')
+           .text(item.texto, tableLeft + 150, currentY + cellPadding);
+        
+        currentY += rowHeight;
+    });
+
+    doc.moveDown(1.5);
+
+    // Segunda tabla: Familiares Paternos (Asistentes)
+    doc.fontSize(18)
+       .font('Helvetica-Bold')
+       .fillColor('#000000')
+       .text('Familiares Paternos', { underline: true })
+       .moveDown(0.5);
+
+    currentY = doc.y;
+    const table2Width = 500;
+    const table2Left = (doc.page.width - table2Width) / 2;
+    
+    // Encabezado de la tabla de familiares
+    doc.fillColor('#F0F0F0')
+       .rect(table2Left, currentY, table2Width, rowHeight)
+       .fill();
+    
+    doc.strokeColor('#CCCCCC')
+       .rect(table2Left, currentY, table2Width, rowHeight)
+       .stroke();
+    
+    doc.fillColor('#333333')
+       .font('Helvetica-Bold')
+       .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
+       .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
+       .text('DNI', table2Left + 350, currentY + cellPadding);
+    
+    currentY += rowHeight;
+
+    // Filas de familiares paternos
     familiaresPaterna.forEach((familiar, index) => {
-        if (currentY > 700) {
+        const familiarData = getFormattedPersonData(familiar);
+        
+        // Fondo alternado
+        if (index % 2 === 0) {
+            doc.fillColor('#FFFFFF')
+               .rect(table2Left, currentY, table2Width, rowHeight)
+               .fill();
+        } else {
+            doc.fillColor('#F9F9F9')
+               .rect(table2Left, currentY, table2Width, rowHeight)
+               .fill();
+        }
+        
+        doc.strokeColor('#CCCCCC')
+           .rect(table2Left, currentY, table2Width, rowHeight)
+           .stroke();
+
+        // Determinar color según parentesco
+        let colorFondo = '#FFFFFF';
+        const tipo = (familiar.tipo || '').toUpperCase();
+        
+        if (tipo.includes('PADRE')) {
+            colorFondo = '#FFAB00';
+        } else if (tipo.includes('HERMANO')) {
+            colorFondo = '#64DD17';
+        } else if (tipo.includes('TIO') || tipo.includes('PRIMO')) {
+            colorFondo = '#D32F2F';
+        } else if (tipo.includes('HIJO')) {
+            colorFondo = '#3F51B5';
+        } else if (tipo.includes('SOBRINO')) {
+            colorFondo = '#7B1FA2';
+        } else {
+            colorFondo = '#9E9E9E';
+        }
+
+        // Dibujar indicador de color
+        doc.fillColor(colorFondo)
+           .rect(table2Left + 5, currentY + 5, 5, rowHeight - 10)
+           .fill();
+
+        // Datos del familiar
+        doc.fillColor('#000000')
+           .font('Helvetica')
+           .text(familiar.tipo || 'FAMILIAR', table2Left + cellPadding + 10, currentY + cellPadding, { width: 120 })
+           .text(`${familiarData.nombres} ${familiarData.apellido_paterno} ${familiarData.apellido_materno}`, 
+                 table2Left + 150, currentY + cellPadding, { width: 180 })
+           .text(familiarData.dni, table2Left + 350, currentY + cellPadding);
+        
+        // Verificar si necesitamos nueva página
+        currentY += rowHeight;
+        if (currentY > 700 && index < familiaresPaterna.length - 1) {
             doc.addPage();
             currentY = 50;
             
-            // Encabezados en nueva página
-            doc.fontSize(10)
-               .font('Helvetica-Bold')
-               .fillColor('#333333')
-               .text('Parentesco', tableLeft, currentY)
-               .text('Nombres', tableLeft + columnWidths[0], currentY)
-               .text('DNI', tableLeft + columnWidths[0] + columnWidths[1], currentY)
-               .text('Apellidos', tableLeft + columnWidths[0] + columnWidths[1] + columnWidths[2], currentY);
-
-            currentY += 25;
-        }
-
-        const familiarData = getFormattedPersonData(familiar);
-        
-        doc.fontSize(10)
-           .font('Helvetica')
-           .fillColor('#000000')
-           .text(familiar.tipo || 'FAMILIAR', tableLeft, currentY)
-           .text(familiarData.nombres, tableLeft + columnWidths[0], currentY)
-           .text(familiarData.dni, tableLeft + columnWidths[0] + columnWidths[1], currentY)
-           .text(`${familiarData.apellido_paterno} ${familiarData.apellido_materno}`, 
-                 tableLeft + columnWidths[0] + columnWidths[1] + columnWidths[2], currentY);
-
-        currentY += 20;
-        
-        // Línea separadora
-        if (index < familiaresPaterna.length - 1) {
-            doc.moveTo(tableLeft, currentY - 5)
-               .lineTo(tableLeft + columnWidths.reduce((a, b) => a + b, 0), currentY - 5)
-               .strokeColor('#CCCCCC')
-               .lineWidth(0.5)
+            // Re-dibujar encabezado en nueva página
+            doc.fillColor('#F0F0F0')
+               .rect(table2Left, currentY, table2Width, rowHeight)
+               .fill();
+            
+            doc.strokeColor('#CCCCCC')
+               .rect(table2Left, currentY, table2Width, rowHeight)
                .stroke();
+            
+            doc.fillColor('#333333')
+               .font('Helvetica-Bold')
+               .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
+               .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
+               .text('DNI', table2Left + 350, currentY + cellPadding);
+            
+            currentY += rowHeight;
+        }
+    });
+
+    doc.moveDown(1.5);
+
+    // Tercera sección: Resumen (Orden del día)
+    doc.fontSize(18)
+       .font('Helvetica-Bold')
+       .fillColor('#000000')
+       .text('Resumen Familiar Paterno', { underline: true })
+       .moveDown(0.5);
+
+    currentY = doc.y;
+    const table3Width = 500;
+    const table3Left = (doc.page.width - table3Width) / 2;
+
+    // Estadísticas de familiares paternos
+    const estadisticasPaterna = {
+        'Padres': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('PADRE')).length,
+        'Hermanos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('HERMANO')).length,
+        'Tíos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('TIO')).length,
+        'Primos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('PRIMO')).length,
+        'Hijos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('HIJO')).length,
+        'Sobrinos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('SOBRINO')).length,
+        'Otros': familiaresPaterna.filter(f => !f.tipo?.toUpperCase().includes('PADRE') && 
+                                               !f.tipo?.toUpperCase().includes('HERMANO') && 
+                                               !f.tipo?.toUpperCase().includes('TIO') && 
+                                               !f.tipo?.toUpperCase().includes('PRIMO') && 
+                                               !f.tipo?.toUpperCase().includes('HIJO') && 
+                                               !f.tipo?.toUpperCase().includes('SOBRINO')).length
+    };
+
+    // Dibujar tabla de resumen
+    Object.entries(estadisticasPaterna).forEach(([parentesco, cantidad], index) => {
+        if (cantidad > 0) {
+            // Fondo alternado
+            if (index % 2 === 0) {
+                doc.fillColor('#FFFFFF')
+                   .rect(table3Left, currentY, table3Width, rowHeight)
+                   .fill();
+            } else {
+                doc.fillColor('#F9F9F9')
+                   .rect(table3Left, currentY, table3Width, rowHeight)
+                   .fill();
+            }
+            
+            doc.strokeColor('#CCCCCC')
+               .rect(table3Left, currentY, table3Width, rowHeight)
+               .stroke();
+
+            doc.fillColor('#000000')
+               .font('Helvetica')
+               .text(parentesco, table3Left + cellPadding, currentY + cellPadding)
+               .text(`${cantidad} familiar(es)`, table3Left + 250, currentY + cellPadding);
+            
+            currentY += rowHeight;
         }
     });
 
@@ -421,95 +583,235 @@ const generateGenealogyTreePDF = async (rawDocumento, principal, familiares) => 
     // --- PÁGINA 2: FAMILIA MATERNA ---
     doc.addPage();
     
-    // Título
+    // Encabezado
     doc.fontSize(24)
        .font('Helvetica-Bold')
+       .fillColor('#000000')
        .text('ÁRBOL GENEALÓGICO', { align: 'center' })
-       .moveDown(0.5);
-
+       .moveDown(0.3);
+    
     doc.fontSize(16)
        .font('Helvetica')
+       .fillColor('#333333')
        .text(`Familia Materna - DNI: ${rawDocumento}`, { align: 'center' })
-       .moveDown(1);
+       .moveDown(1.5);
 
-    // Información del Principal (opcional, se puede repetir o no)
-    doc.fontSize(14)
+    // Información del Principal (repetida para contexto)
+    doc.fontSize(18)
        .font('Helvetica-Bold')
-       .text('PERSONA PRINCIPAL:', { underline: true })
-       .moveDown(0.3);
-
-    doc.fontSize(12)
-       .font('Helvetica')
-       .text(`Nombre: ${principalData.nombres}`)
-       .text(`Apellidos: ${principalData.apellido_paterno} ${principalData.apellido_materno}`)
-       .text(`DNI: ${principalData.dni}`)
-       .moveDown(1);
-
-    // Tabla de Familiares Maternos
-    doc.fontSize(14)
-       .font('Helvetica-Bold')
-       .text('FAMILIARES MATERNA:', { underline: true })
+       .fillColor('#000000')
+       .text('Información', { underline: true })
        .moveDown(0.5);
 
-    // Encabezados de la tabla
-    const tableTopMaterna = doc.y;
+    currentY = doc.y;
     
-    // Encabezados
-    doc.fontSize(10)
+    // Tabla con información del principal
+    doc.fillColor('#F0F0F0')
+       .rect(tableLeft, currentY, tableWidth, rowHeight)
+       .fill();
+    
+    doc.strokeColor('#CCCCCC')
+       .rect(tableLeft, currentY, tableWidth, rowHeight)
+       .stroke();
+    
+    doc.fillColor('#333333')
        .font('Helvetica-Bold')
-       .fillColor('#333333')
-       .text('Parentesco', tableLeft, tableTopMaterna)
-       .text('Nombres', tableLeft + columnWidths[0], tableTopMaterna)
-       .text('DNI', tableLeft + columnWidths[0] + columnWidths[1], tableTopMaterna)
-       .text('Apellidos', tableLeft + columnWidths[0] + columnWidths[1] + columnWidths[2], tableTopMaterna);
+       .text('Persona Principal', tableLeft + cellPadding, currentY + cellPadding);
+    
+    currentY += rowHeight;
 
-    // Línea de separación
-    doc.moveTo(tableLeft, tableTopMaterna + 15)
-       .lineTo(tableLeft + columnWidths.reduce((a, b) => a + b, 0), tableTopMaterna + 15)
+    // Datos del principal
+    doc.fillColor('#FFFFFF')
+       .rect(tableLeft, currentY, tableWidth, rowHeight * 3)
+       .fill();
+    
+    doc.strokeColor('#CCCCCC')
+       .rect(tableLeft, currentY, tableWidth, rowHeight * 3)
        .stroke();
 
-    currentY = tableTopMaterna + 25;
+    doc.fillColor('#000000')
+       .font('Helvetica')
+       .text(`Nombre: ${principalData.nombres}`, tableLeft + cellPadding, currentY + cellPadding)
+       .text(`Apellidos: ${principalData.apellido_paterno} ${principalData.apellido_materno}`, 
+             tableLeft + cellPadding, currentY + rowHeight + cellPadding)
+       .text(`DNI: ${principalData.dni}`, tableLeft + cellPadding, currentY + (rowHeight * 2) + cellPadding);
+    
+    currentY += (rowHeight * 3) + 20;
 
-    // Filas de la tabla
+    doc.moveDown(1.5);
+
+    // Segunda tabla: Familiares Maternos
+    doc.fontSize(18)
+       .font('Helvetica-Bold')
+       .fillColor('#000000')
+       .text('Familiares Maternos', { underline: true })
+       .moveDown(0.5);
+
+    currentY = doc.y;
+    
+    // Encabezado de la tabla de familiares maternos
+    doc.fillColor('#F0F0F0')
+       .rect(table2Left, currentY, table2Width, rowHeight)
+       .fill();
+    
+    doc.strokeColor('#CCCCCC')
+       .rect(table2Left, currentY, table2Width, rowHeight)
+       .stroke();
+    
+    doc.fillColor('#333333')
+       .font('Helvetica-Bold')
+       .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
+       .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
+       .text('DNI', table2Left + 350, currentY + cellPadding);
+    
+    currentY += rowHeight;
+
+    // Filas de familiares maternos
     familiaresMaterna.forEach((familiar, index) => {
-        if (currentY > 700) {
+        const familiarData = getFormattedPersonData(familiar);
+        
+        // Fondo alternado
+        if (index % 2 === 0) {
+            doc.fillColor('#FFFFFF')
+               .rect(table2Left, currentY, table2Width, rowHeight)
+               .fill();
+        } else {
+            doc.fillColor('#F9F9F9')
+               .rect(table2Left, currentY, table2Width, rowHeight)
+               .fill();
+        }
+        
+        doc.strokeColor('#CCCCCC')
+           .rect(table2Left, currentY, table2Width, rowHeight)
+           .stroke();
+
+        // Determinar color según parentesco
+        let colorFondo = '#FFFFFF';
+        const tipo = (familiar.tipo || '').toUpperCase();
+        
+        if (tipo.includes('MADRE')) {
+            colorFondo = '#FFAB00';
+        } else if (tipo.includes('HERMANA')) {
+            colorFondo = '#64DD17';
+        } else if (tipo.includes('TIA') || tipo.includes('PRIMA')) {
+            colorFondo = '#D32F2F';
+        } else if (tipo.includes('HIJA')) {
+            colorFondo = '#3F51B5';
+        } else if (tipo.includes('SOBRINA')) {
+            colorFondo = '#7B1FA2';
+        } else {
+            colorFondo = '#9E9E9E';
+        }
+
+        // Dibujar indicador de color
+        doc.fillColor(colorFondo)
+           .rect(table2Left + 5, currentY + 5, 5, rowHeight - 10)
+           .fill();
+
+        // Datos del familiar
+        doc.fillColor('#000000')
+           .font('Helvetica')
+           .text(familiar.tipo || 'FAMILIAR', table2Left + cellPadding + 10, currentY + cellPadding, { width: 120 })
+           .text(`${familiarData.nombres} ${familiarData.apellido_paterno} ${familiarData.apellido_materno}`, 
+                 table2Left + 150, currentY + cellPadding, { width: 180 })
+           .text(familiarData.dni, table2Left + 350, currentY + cellPadding);
+        
+        // Verificar si necesitamos nueva página
+        currentY += rowHeight;
+        if (currentY > 700 && index < familiaresMaterna.length - 1) {
             doc.addPage();
             currentY = 50;
             
-            // Encabezados en nueva página
-            doc.fontSize(10)
-               .font('Helvetica-Bold')
-               .fillColor('#333333')
-               .text('Parentesco', tableLeft, currentY)
-               .text('Nombres', tableLeft + columnWidths[0], currentY)
-               .text('DNI', tableLeft + columnWidths[0] + columnWidths[1], currentY)
-               .text('Apellidos', tableLeft + columnWidths[0] + columnWidths[1] + columnWidths[2], currentY);
-
-            currentY += 25;
-        }
-
-        const familiarData = getFormattedPersonData(familiar);
-        
-        doc.fontSize(10)
-           .font('Helvetica')
-           .fillColor('#000000')
-           .text(familiar.tipo || 'FAMILIAR', tableLeft, currentY)
-           .text(familiarData.nombres, tableLeft + columnWidths[0], currentY)
-           .text(familiarData.dni, tableLeft + columnWidths[0] + columnWidths[1], currentY)
-           .text(`${familiarData.apellido_paterno} ${familiarData.apellido_materno}`, 
-                 tableLeft + columnWidths[0] + columnWidths[1] + columnWidths[2], currentY);
-
-        currentY += 20;
-        
-        // Línea separadora
-        if (index < familiaresMaterna.length - 1) {
-            doc.moveTo(tableLeft, currentY - 5)
-               .lineTo(tableLeft + columnWidths.reduce((a, b) => a + b, 0), currentY - 5)
-               .strokeColor('#CCCCCC')
-               .lineWidth(0.5)
+            // Re-dibujar encabezado en nueva página
+            doc.fillColor('#F0F0F0')
+               .rect(table2Left, currentY, table2Width, rowHeight)
+               .fill();
+            
+            doc.strokeColor('#CCCCCC')
+               .rect(table2Left, currentY, table2Width, rowHeight)
                .stroke();
+            
+            doc.fillColor('#333333')
+               .font('Helvetica-Bold')
+               .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
+               .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
+               .text('DNI', table2Left + 350, currentY + cellPadding);
+            
+            currentY += rowHeight;
         }
     });
+
+    doc.moveDown(1.5);
+
+    // Tercera sección: Resumen Familiar Materno
+    doc.fontSize(18)
+       .font('Helvetica-Bold')
+       .fillColor('#000000')
+       .text('Resumen Familiar Materno', { underline: true })
+       .moveDown(0.5);
+
+    currentY = doc.y;
+
+    // Estadísticas de familiares maternos
+    const estadisticasMaterna = {
+        'Madres': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('MADRE')).length,
+        'Hermanas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('HERMANA')).length,
+        'Tías': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('TIA')).length,
+        'Primas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('PRIMA')).length,
+        'Hijas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('HIJA')).length,
+        'Sobrinas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('SOBRINA')).length,
+        'Otras': familiaresMaterna.filter(f => !f.tipo?.toUpperCase().includes('MADRE') && 
+                                               !f.tipo?.toUpperCase().includes('HERMANA') && 
+                                               !f.tipo?.toUpperCase().includes('TIA') && 
+                                               !f.tipo?.toUpperCase().includes('PRIMA') && 
+                                               !f.tipo?.toUpperCase().includes('HIJA') && 
+                                               !f.tipo?.toUpperCase().includes('SOBRINA')).length
+    };
+
+    // Dibujar tabla de resumen
+    Object.entries(estadisticasMaterna).forEach(([parentesco, cantidad], index) => {
+        if (cantidad > 0) {
+            // Fondo alternado
+            if (index % 2 === 0) {
+                doc.fillColor('#FFFFFF')
+                   .rect(table3Left, currentY, table3Width, rowHeight)
+                   .fill();
+            } else {
+                doc.fillColor('#F9F9F9')
+                   .rect(table3Left, currentY, table3Width, rowHeight)
+                   .fill();
+            }
+            
+            doc.strokeColor('#CCCCCC')
+               .rect(table3Left, currentY, table3Width, rowHeight)
+               .stroke();
+
+            doc.fillColor('#000000')
+               .font('Helvetica')
+               .text(parentesco, table3Left + cellPadding, currentY + cellPadding)
+               .text(`${cantidad} familiar(es)`, table3Left + 250, currentY + cellPadding);
+            
+            currentY += rowHeight;
+        }
+    });
+
+    // Resumen general
+    doc.moveDown(1);
+    doc.fontSize(14)
+       .font('Helvetica-Bold')
+       .fillColor('#000000')
+       .text('Resumen General del Árbol Genealógico', { underline: true })
+       .moveDown(0.5);
+
+    doc.fontSize(12)
+       .font('Helvetica')
+       .fillColor('#000000')
+       .text(`• Total Familiares Paternos: ${familiaresPaterna.length}`)
+       .text(`• Total Familiares Maternos: ${familiaresMaterna.length}`)
+       .text(`• Total General: ${familiares.length}`)
+       .moveDown(0.5)
+       .text(`• Persona Principal: ${principalData.nombres} ${principalData.apellido_paterno} ${principalData.apellido_materno}`)
+       .text(`• DNI Consultado: ${rawDocumento}`);
 
     // Pie de página para hoja materna
     doc.fontSize(10)
@@ -535,6 +837,30 @@ const generateGenealogyTreePDF = async (rawDocumento, principal, familiares) => 
 // ==============================================================================
 //  FUNCIONES DE DIBUJO (ACTA DE MATRIMONIO) - MANTENIDA
 // ==============================================================================
+
+/**
+ * Función auxiliar para dividir texto en líneas que caben dentro de un ancho máximo (Canvas).
+ */
+const wrapText = (ctx, text, maxWidth, lineHeight) => {
+    const words = text.split(' ');
+    let line = '';
+    const lines = [];
+
+    for (let i = 0; i < words.length; i++) {
+        const testLine = line + words[i] + ' ';
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+
+        if (testWidth > maxWidth && i > 0) {
+            lines.push(line.trim());
+            line = words[i] + ' ';
+        } else {
+            line = testLine;
+        }
+    }
+    lines.push(line.trim());
+    return { lines, height: lines.length * lineHeight };
+};
 
 /**
  * Dibuja la imagen del Acta de Matrimonio, imitando el diseño de la imagen subida.
@@ -768,7 +1094,6 @@ const generateMarriageCertificateImage = async (rawDocumento, principal, data) =
             // Filas de estado civil, no deberían necesitar salto de línea, usamos altura mínima
             rowHeight = ROW_HEIGHT;
             wrappedContent = wrapText(ctx, contentText, contentWidth, LINE_HEIGHT);
-             // wrappedContent = { lines: [contentText], height: LINE_HEIGHT }; 
         }
 
         // 2. Dibujar Fondos y Bordes
