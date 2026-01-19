@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 const API_BASE_URL = process.env.API_BASE_URL || "https://gdni-imagen-v2.fly.dev";
-const ARBOL_GENEALOGICO_API_URL = process.env.ARBOL_GENEALOGICO_API_URL || "https://consulta-pe-imagenes-v2.fly.dev/consultar-arbol";
+const ARBOL_GENEALOGICO_API_URL = process.env.ARBOL_GENEALOGICO_API_URL || "";
 
 const COLORS = {
     PATERNA: "#3498DB",
@@ -46,7 +46,7 @@ function clasificarFamilia(coincidences) {
 function drawHeader(doc, title) {
     doc.rect(0, 0, 612, 50).fill(COLORS.DIRECTA);
     doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(16).text(title, 40, 18);
-    doc.fontSize(10).text("SISTEMA DE CONSULTA GENEALOGICA", 400, 22, { align: "right" });
+    doc.fontSize(10).text("SISTEMA DE CONSULTA", 400, 22, { align: "right" });
 }
 
 function drawPersonCard(doc, x, y, person, color) {
