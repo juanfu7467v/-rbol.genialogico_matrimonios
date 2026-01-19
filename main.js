@@ -6,7 +6,6 @@ const cors = require('cors');
 const { Buffer } = require('buffer'); 
 const path = require('path'); 
 const crypto = require('crypto');
-const PDFDocument = require('pdfkit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
