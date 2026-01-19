@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
-const API_BASE_URL = process.env.API_BASE_URL || "https://gdni-imagen-v2.fly.dev";
+const API_BASE_URL = process.env.API_BASE_URL || "";
 const ARBOL_GENEALOGICO_API_URL = process.env.ARBOL_GENEALOGICO_API_URL || "";
 
 const COLORS = {
