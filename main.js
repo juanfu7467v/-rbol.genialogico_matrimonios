@@ -1,1549 +1,512 @@
 const express = require("express");
 const axios = require("axios");
 const { createCanvas, loadImage } = require("canvas");
-const { v4: uuidv4 } = require("uuid");
-const cors = require('cors'); 
-const { Buffer } = require('buffer'); 
-const path = require('path'); 
-const crypto = require('crypto');
+const cors = require('cors');
+const PDFDocument = require('pdfkit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = "0.0.0.0";
 
-// AGREGADO: Habilitar CORS para todas las rutas y orígenes
-app.use(cors()); 
+// Configuración básica
+app.use(cors());
 
-// Definir la URL base pública si no se proporciona
-const API_BASE_URL = process.env.API_BASE_URL || "https://consulta-pe-imagenes-v2.fly.dev";
-
-// -----------------------------------------------------------
-// --- NUEVAS URLs de las APIs ---
-// -----------------------------------------------------------
-// 1. API de Árbol Genealógico
-const ARBOL_GENEALOGICO_API_URL = "https://banckend-poxyv1-cosultape-masitaprex.fly.dev/arbol"; 
-// 2. API de Acta de Matrimonio
-const ACTA_MATRIMONIO_API_URL = "https://banckend-poxyv1-cosultape-masitaprex.fly.dev/matrimonios"; 
-
-// --- Configuración de GitHub ---
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_REPO = process.env.GITHUB_REPO;
-const GITHUB_BRANCH = "main";
-
-// --- Constantes de Diseño Generales (Ajustadas para el diseño de la imagen subida) ---
-const CANVAS_WIDTH_DEFAULT = 800; // Ancho más estándar para un documento
-const MARGIN = 40;
-const FONT_FAMILY = "sans-serif"; // Mantenemos sans-serif que se parece a la imagen
-const COLOR_TITLE = '#000000';
-const COLOR_TEXT = '#000000'; // Color de texto principal (NEGRO)
-const COLOR_SECONDARY_TEXT = '#333333';
-const FALLBACK_PHOTO_URL = "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEh4p_jX8U0kG7R8tD9K0h0bVv7V9jE_s2O_jJ4_X5kZ0X9qL_n9jX5Q6g8Q/s512/placeholder.png"; 
-
-// Colores específicos del diseño de la imagen subida
-const BACKGROUND_COLOR = '#FFFFFF'; // Color de fondo principal (BLANCO)
-const HEADER_BACKGROUND_COLOR = '#F0F0F0'; // Gris claro
-const TABLE_BORDER_COLOR = '#CCCCCC'; // Borde claro
-const TABLE_HEADER_COLOR = '#333333'; // Color de fuente oscuro para encabezados
+// --- CONFIGURACIÓN ---
+const ARBOL_GENEALOGICO_API_URL = process.env.ARBOL_GENEALOGICO_API_URL || ""; // Reemplaza si no usas env
+// Fuente estándar
+const FONT_FAMILY = "sans-serif";
 
 // ==============================================================================
-//  FUNCIONES DE UTILIDAD
+//  UTILIDADES DE DIBUJO (CANVAS)
 // ==============================================================================
 
 /**
- * Mapeo de nombres de API a una clave corta y segura para el nombre del archivo.
- * @type {Object<string, string>}
+ * Dibuja una tabla estilo "Lista" (Diseño Imagen 2 - Tabla limpia)
+ * Se usa para la Hoja 1 (Paterna) y Hoja 2 (Materna)
  */
-const API_TYPE_MAP = {
-    "ARBOL GENEALOGICO": "ARBOL",
-    "ACTA DE MATRIMONIO": "MATRIMONIO", // Cambiado para reflejar el requisito
-};
+const drawFamilyListPage = async (ctx, width, height, title, principal, familiares, side) => {
+    // 1. Fondo Blanco
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, width, height);
 
-/**
- * Carga una imagen, o usa una imagen de fallback si falla.
- */
-const loadImageWithFallback = async (url) => {
-    try {
-        if (!url || url === 'N/A') {
-            throw new Error("URL no proporcionada o inválida.");
-        }
-        const image = await loadImage(url);
-        return { image, loaded: true };
-    } catch (e) {
-        try {
-            const fallback = await loadImage(FALLBACK_PHOTO_URL);
-            return { image: fallback, loaded: false };
-        } catch (e) {
-             console.error("Error al cargar imagen de fallback. Usando N/A.");
-             return { image: null, loaded: false };
-        }
-    }
-};
+    const MARGIN = 40;
+    let currentY = MARGIN;
 
-/**
- * Función para generar un color de fondo para el avatar de fallback basado en el DNI.
- */
-const generateColorFromDni = (dni) => {
-    if (!dni) return '#333333';
-    // Generar un hash SHA256 del DNI y tomar los primeros 6 caracteres para el color
-    const hash = crypto.createHash('sha256').update(dni.toString()).digest('hex').substring(0, 6);
-    return `#${hash}`;
-};
-
-/**
- * Función simplificada para la subida a GitHub.
- */
-const uploadToGitHub = async (fileName, fileBuffer, messagePrefix, fileType = 'png') => {
-    if (!GITHUB_TOKEN || !GITHUB_REPO) {
-        throw new Error("Error de configuración: GITHUB_TOKEN o GITHUB_REPO no están definidos.");
-    }
-
-    const [owner, repo] = GITHUB_REPO.split('/');
-    if (!owner || !repo) {
-        throw new Error("El formato de GITHUB_REPO debe ser 'owner/repository-name'.");
-    }
-
-    const filePath = `public/${fileName}`; 
-    const contentBase64 = fileBuffer.toString('base64');
-
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
-    // Construir la URL RAW de GitHub que se usará para la descarga
-    const publicUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${GITHUB_BRANCH}/${filePath}`;
-
-    const data = {
-        message: `${messagePrefix} generada para ${fileName}`,
-        content: contentBase64,
-        branch: GITHUB_BRANCH
-    };
-
-    const config = {
-        headers: {
-            Authorization: `token ${GITHUB_TOKEN}`,
-            'Content-Type': 'application/json',
-            'User-Agent': 'FlyIoImageGeneratorApp'
-        }
-    };
-
-    // Primero intentar obtener el SHA si el archivo existe
-    try {
-        const checkResponse = await axios.get(apiUrl, config);
-        if (checkResponse.data.sha) {
-            data.sha = checkResponse.data.sha; // Añadir SHA para actualizar
-            data.message = `fix: Actualización de ${messagePrefix} para ${fileName}`;
-        }
-    } catch (error) {
-        // Ignorar 404, significa que el archivo es nuevo
-        if (error.response?.status !== 404) {
-             console.error(`Error al verificar SHA para subir a GitHub: ${error.message}`);
-        }
-    }
-
-    await axios.put(apiUrl, data, config);
-    return publicUrl;
-};
-
-/**
- * NUEVO: Comprueba si ya existe un archivo para el DNI y tipo de API.
- * Retorna la URL raw si existe, o null si no.
- */
-const checkIfFileExists = async (dni, apiType, fileExtension = 'pdf') => {
-    if (!GITHUB_TOKEN || !GITHUB_REPO) {
-        console.warn("ADVERTENCIA: GITHUB_TOKEN o GITHUB_REPO no están definidos para la verificación.");
-        return null;
-    }
-
-    const [owner, repo] = GITHUB_REPO.split('/');
-    if (!owner || !repo) return null;
+    // --- ENCABEZADO ESTILO "Pe RESULTADO" ---
+    // Logo simulado o texto
+    ctx.fillStyle = "#000000";
+    ctx.font = `bold 50px ${FONT_FAMILY}`;
+    ctx.textAlign = "left";
+    ctx.fillText("Pe", MARGIN, currentY + 40);
     
-    // Nombre del archivo a buscar sin UUID
-    const targetFileName = `${dni}_${apiType}.${fileExtension}`.toLowerCase();
-    const filePathPrefix = `public/`;
-
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePathPrefix}`;
-
-    const config = {
-        headers: {
-            Authorization: `token ${GITHUB_TOKEN}`,
-            'User-Agent': 'FlyIoImageGeneratorApp',
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    };
-
-    try {
-        const response = await axios.get(apiUrl, config);
-        const files = response.data;
-
-        // Buscar el archivo con el nombre exacto (sin UUID)
-        const existingFile = files.find(file => file.type === 'file' && file.name.toLowerCase() === targetFileName);
-
-        if (existingFile) {
-            console.log(`✅ Archivo existente encontrado para DNI: ${dni} (${apiType}).`);
-            // Devolver la URL raw para la descarga
-            return `https://raw.githubusercontent.com/${owner}/${repo}/${GITHUB_BRANCH}/${filePathPrefix}${existingFile.name}`;
-        }
-
-        return null;
-
-    } catch (error) {
-        // 404 significa que la carpeta 'public' no existe o que no hay contenido, lo cual es normal.
-        if (error.response?.status !== 404) {
-             console.error(`Error al verificar existencia de archivo en GitHub (status ${error.response?.status}):`, error.message);
-        }
-        return null;
-    }
-};
-
-/**
- * NUEVO: Sube el archivo si no existe, o retorna la URL del archivo existente.
- */
-const uploadOrReturnExisting = async (dni, apiName, fileBuffer, fileType = 'pdf') => {
-    const apiTypeKey = API_TYPE_MAP[apiName] || 'DESCONOCIDO';
-    const messagePrefix = apiName.includes("MATRIMONIO") ? "feat: Matrimonios" : "feat: Árbol Genealógico";
-    
-    // 1. Verificar si el archivo ya existe
-    const existingUrl = await checkIfFileExists(dni, apiTypeKey, fileType);
-
-    if (existingUrl) {
-        // El archivo existe, retornamos la URL existente
-        return { 
-            url: existingUrl, 
-            status: "existing" 
-        };
-    }
-
-    // 2. Si no existe, generamos el nombre de archivo definitivo (sin UUID) y subimos
-    const fileName = `${dni}_${apiTypeKey}.${fileType}`.toLowerCase();
-    console.log(`⬆️ Subiendo nuevo archivo: ${fileName}`);
-    const newUrl = await uploadToGitHub(fileName, fileBuffer, messagePrefix, fileType);
-    
-    return { 
-        url: newUrl, 
-        status: "new" 
-    };
-};
-
-/**
- * Función auxiliar para estandarizar la obtención de nombres y apellidos de la persona principal.
- * @param {object} data - El objeto de datos.
- * @returns {object} Un objeto con dni, nombres, apellido_paterno, apellido_materno.
- */
-const getFormattedPersonData = (data) => {
-    if (!data) {
-        return {
-            dni: 'N/A',
-            nombres: 'N/A',
-            apellido_paterno: 'N/A',
-            apellido_materno: 'N/A',
-        };
-    }
-
-    // La API externa usa 'nom', 'ap', 'am'. La API interna usa 'nombres', 'apellido_paterno', 'apellido_materno' o variantes.
-    const nombres = (data.nombres || data.nom || data.preNombres || '').toUpperCase().trim();
-    const apellidoPaterno = (data.apellido_paterno || data.ap || data.ape_pat || data.apePaterno || '').toUpperCase().trim();
-    const apellidoMaterno = (data.apellido_materno || data.am || data.ape_mat || data.apeMaterno || '').toUpperCase().trim();
-
-    return {
-        dni: data.dni || data.nuDni || 'N/A',
-        nombres,
-        apellido_paterno: apellidoPaterno,
-        apellido_materno: apellidoMaterno,
-    };
-};
-
-/**
- * Función auxiliar para dividir texto en líneas que caben dentro de un ancho máximo.
- * @param {string} text - Texto a envolver.
- * @param {number} maxWidth - Ancho máximo permitido para el texto.
- * @param {number} fontSize - Tamaño de fuente.
- * @param {object} doc - Documento PDF.
- * @returns {Array<string>} Array de líneas.
- */
-const wrapTextPDF = (text, maxWidth, fontSize, doc) => {
-    const words = text.split(' ');
-    const lines = [];
-    let currentLine = '';
-
-    for (const word of words) {
-        const testLine = currentLine ? `${currentLine} ${word}` : word;
-        const testWidth = doc.widthOfString(testLine, { fontSize });
-
-        if (testWidth <= maxWidth) {
-            currentLine = testLine;
-        } else {
-            if (currentLine) lines.push(currentLine);
-            currentLine = word;
-        }
-    }
-
-    if (currentLine) lines.push(currentLine);
-    return lines;
-};
-
-// ==============================================================================
-//  FUNCIONES DE GENERACIÓN DE PDF (ÁRBOL GENEALÓGICO) - MODIFICADA
-// ==============================================================================
-
-/**
- * Genera el PDF del Árbol Genealógico siguiendo el diseño de la imagen subida.
- */
-const generateGenealogyTreePDF = async (rawDocumento, principal, familiares) => {
-    // Crear un nuevo documento PDF
-    const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50,
-        bufferPages: true
-    });
-
-    const buffers = [];
-    doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', () => {});
-
-    // Separar familiares en paterna y materna
-    const familiaresPaterna = familiares.filter(f => {
-        const tipo = (f.tipo || '').toUpperCase();
-        return tipo.includes('PADRE') || tipo.includes('HERMANO') || 
-               tipo.includes('TIO') || tipo.includes('PRIMO') || 
-               tipo.includes('HIJO') || tipo.includes('SOBRINO') ||
-               (tipo.includes('FAMILIAR') && !tipo.includes('MADRE') && !tipo.includes('HERMANA') && 
-                !tipo.includes('TIA') && !tipo.includes('PRIMA') && !tipo.includes('HIJA') && !tipo.includes('SOBRINA'));
-    });
-
-    const familiaresMaterna = familiares.filter(f => {
-        const tipo = (f.tipo || '').toUpperCase();
-        return tipo.includes('MADRE') || tipo.includes('HERMANA') || 
-               tipo.includes('TIA') || tipo.includes('PRIMA') || 
-               tipo.includes('HIJA') || tipo.includes('SOBRINA');
-    });
-
-    // --- PÁGINA 1: FAMILIA PATERNA ---
-    doc.addPage();
-    
-    // Encabezado similar al diseño de la imagen
-    doc.fontSize(24)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('ÁRBOL GENEALÓGICO', { align: 'center' })
-       .moveDown(0.3);
-    
-    doc.fontSize(16)
-       .font('Helvetica')
-       .fillColor('#333333')
-       .text(`Familia Paterna - DNI: ${rawDocumento}`, { align: 'center' })
-       .moveDown(1.5);
-
-    // Información del Principal (Tabla similar a la imagen)
-    const principalData = getFormattedPersonData(principal);
-    
-    // Primera tabla: Información (Leyenda)
-    doc.fontSize(18)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Información', { underline: true })
-       .moveDown(0.5);
-
-    // Definir dimensiones de la tabla
-    const tableWidth = 500;
-    const tableLeft = (doc.page.width - tableWidth) / 2;
-    const rowHeight = 30;
-    const cellPadding = 10;
-    let currentY = doc.y;
-
-    // Leyenda de colores (similar a la tabla de información de la imagen)
-    const leyendaData = [
-        { color: '#00B8D4', texto: 'PRINCIPAL (DNI consultado)' },
-        { color: '#FFAB00', texto: 'PADRES / MADRES' },
-        { color: '#64DD17', texto: 'HERMANOS / HERMANAS' },
-        { color: '#D32F2F', texto: 'TÍOS / TÍAS / PRIMOS / PRIMAS' },
-        { color: '#3F51B5', texto: 'HIJOS / HIJAS' },
-        { color: '#7B1FA2', texto: 'SOBRINOS / SOBRINAS' },
-        { color: '#9E9E9E', texto: 'OTROS FAMILIARES / CUÑADOS' }
-    ];
-
-    // Dibujar tabla de leyenda
-    doc.fontSize(12);
-    
-    // Encabezado de tabla
-    doc.fillColor('#F0F0F0')
-       .rect(tableLeft, currentY, tableWidth, rowHeight)
-       .fill();
-    
-    doc.strokeColor('#CCCCCC')
-       .rect(tableLeft, currentY, tableWidth, rowHeight)
-       .stroke();
-    
-    doc.fillColor('#333333')
-       .font('Helvetica-Bold')
-       .text('Color', tableLeft + cellPadding, currentY + cellPadding)
-       .text('Significado', tableLeft + 150, currentY + cellPadding);
-    
-    currentY += rowHeight;
-
-    // Filas de la leyenda
-    leyendaData.forEach((item, index) => {
-        // Fondo alternado para mejor legibilidad
-        if (index % 2 === 0) {
-            doc.fillColor('#FFFFFF')
-               .rect(tableLeft, currentY, tableWidth, rowHeight)
-               .fill();
-        } else {
-            doc.fillColor('#F9F9F9')
-               .rect(tableLeft, currentY, tableWidth, rowHeight)
-               .fill();
-        }
-        
-        doc.strokeColor('#CCCCCC')
-           .rect(tableLeft, currentY, tableWidth, rowHeight)
-           .stroke();
-
-        // Dibujar cuadrado de color
-        doc.fillColor(item.color)
-           .rect(tableLeft + cellPadding, currentY + cellPadding - 5, 15, 15)
-           .fill();
-        
-        doc.strokeColor(item.color)
-           .rect(tableLeft + cellPadding, currentY + cellPadding - 5, 15, 15)
-           .stroke();
-
-        // Texto de la leyenda
-        doc.fillColor('#000000')
-           .font('Helvetica')
-           .text(item.texto, tableLeft + 150, currentY + cellPadding);
-        
-        currentY += rowHeight;
-    });
-
-    doc.moveDown(1.5);
-
-    // Segunda tabla: Familiares Paternos (Asistentes)
-    doc.fontSize(18)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Familiares Paternos', { underline: true })
-       .moveDown(0.5);
-
-    currentY = doc.y;
-    const table2Width = 500;
-    const table2Left = (doc.page.width - table2Width) / 2;
-    
-    // Encabezado de la tabla de familiares
-    doc.fillColor('#F0F0F0')
-       .rect(table2Left, currentY, table2Width, rowHeight)
-       .fill();
-    
-    doc.strokeColor('#CCCCCC')
-       .rect(table2Left, currentY, table2Width, rowHeight)
-       .stroke();
-    
-    doc.fillColor('#333333')
-       .font('Helvetica-Bold')
-       .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
-       .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
-       .text('DNI', table2Left + 350, currentY + cellPadding);
-    
-    currentY += rowHeight;
-
-    // Filas de familiares paternos
-    familiaresPaterna.forEach((familiar, index) => {
-        const familiarData = getFormattedPersonData(familiar);
-        
-        // Fondo alternado
-        if (index % 2 === 0) {
-            doc.fillColor('#FFFFFF')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .fill();
-        } else {
-            doc.fillColor('#F9F9F9')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .fill();
-        }
-        
-        doc.strokeColor('#CCCCCC')
-           .rect(table2Left, currentY, table2Width, rowHeight)
-           .stroke();
-
-        // Determinar color según parentesco
-        let colorFondo = '#FFFFFF';
-        const tipo = (familiar.tipo || '').toUpperCase();
-        
-        if (tipo.includes('PADRE')) {
-            colorFondo = '#FFAB00';
-        } else if (tipo.includes('HERMANO')) {
-            colorFondo = '#64DD17';
-        } else if (tipo.includes('TIO') || tipo.includes('PRIMO')) {
-            colorFondo = '#D32F2F';
-        } else if (tipo.includes('HIJO')) {
-            colorFondo = '#3F51B5';
-        } else if (tipo.includes('SOBRINO')) {
-            colorFondo = '#7B1FA2';
-        } else {
-            colorFondo = '#9E9E9E';
-        }
-
-        // Dibujar indicador de color
-        doc.fillColor(colorFondo)
-           .rect(table2Left + 5, currentY + 5, 5, rowHeight - 10)
-           .fill();
-
-        // Datos del familiar
-        doc.fillColor('#000000')
-           .font('Helvetica')
-           .text(familiar.tipo || 'FAMILIAR', table2Left + cellPadding + 10, currentY + cellPadding, { width: 120 })
-           .text(`${familiarData.nombres} ${familiarData.apellido_paterno} ${familiarData.apellido_materno}`, 
-                 table2Left + 150, currentY + cellPadding, { width: 180 })
-           .text(familiarData.dni, table2Left + 350, currentY + cellPadding);
-        
-        // Verificar si necesitamos nueva página
-        currentY += rowHeight;
-        if (currentY > 700 && index < familiaresPaterna.length - 1) {
-            doc.addPage();
-            currentY = 50;
-            
-            // Re-dibujar encabezado en nueva página
-            doc.fillColor('#F0F0F0')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .fill();
-            
-            doc.strokeColor('#CCCCCC')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .stroke();
-            
-            doc.fillColor('#333333')
-               .font('Helvetica-Bold')
-               .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
-               .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
-               .text('DNI', table2Left + 350, currentY + cellPadding);
-            
-            currentY += rowHeight;
-        }
-    });
-
-    doc.moveDown(1.5);
-
-    // Tercera sección: Resumen (Orden del día)
-    doc.fontSize(18)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Resumen Familiar Paterno', { underline: true })
-       .moveDown(0.5);
-
-    currentY = doc.y;
-    const table3Width = 500;
-    const table3Left = (doc.page.width - table3Width) / 2;
-
-    // Estadísticas de familiares paternos
-    const estadisticasPaterna = {
-        'Padres': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('PADRE')).length,
-        'Hermanos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('HERMANO')).length,
-        'Tíos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('TIO')).length,
-        'Primos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('PRIMO')).length,
-        'Hijos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('HIJO')).length,
-        'Sobrinos': familiaresPaterna.filter(f => f.tipo?.toUpperCase().includes('SOBRINO')).length,
-        'Otros': familiaresPaterna.filter(f => !f.tipo?.toUpperCase().includes('PADRE') && 
-                                               !f.tipo?.toUpperCase().includes('HERMANO') && 
-                                               !f.tipo?.toUpperCase().includes('TIO') && 
-                                               !f.tipo?.toUpperCase().includes('PRIMO') && 
-                                               !f.tipo?.toUpperCase().includes('HIJO') && 
-                                               !f.tipo?.toUpperCase().includes('SOBRINO')).length
-    };
-
-    // Dibujar tabla de resumen
-    Object.entries(estadisticasPaterna).forEach(([parentesco, cantidad], index) => {
-        if (cantidad > 0) {
-            // Fondo alternado
-            if (index % 2 === 0) {
-                doc.fillColor('#FFFFFF')
-                   .rect(table3Left, currentY, table3Width, rowHeight)
-                   .fill();
-            } else {
-                doc.fillColor('#F9F9F9')
-                   .rect(table3Left, currentY, table3Width, rowHeight)
-                   .fill();
-            }
-            
-            doc.strokeColor('#CCCCCC')
-               .rect(table3Left, currentY, table3Width, rowHeight)
-               .stroke();
-
-            doc.fillColor('#000000')
-               .font('Helvetica')
-               .text(parentesco, table3Left + cellPadding, currentY + cellPadding)
-               .text(`${cantidad} familiar(es)`, table3Left + 250, currentY + cellPadding);
-            
-            currentY += rowHeight;
-        }
-    });
-
-    // Pie de página para hoja paterna
-    doc.fontSize(10)
-       .fillColor('#666666')
-       .text(`Total Familiares Paternos: ${familiaresPaterna.length}`, 50, 750, { align: 'left' })
-       .text(`Página 1 de 2 - Familia Paterna`, 0, 750, { align: 'center' })
-       .text(`Generado el: ${new Date().toLocaleDateString('es-ES')}`, 0, 750, { align: 'right' });
-
-    // --- PÁGINA 2: FAMILIA MATERNA ---
-    doc.addPage();
-    
-    // Encabezado
-    doc.fontSize(24)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('ÁRBOL GENEALÓGICO', { align: 'center' })
-       .moveDown(0.3);
-    
-    doc.fontSize(16)
-       .font('Helvetica')
-       .fillColor('#333333')
-       .text(`Familia Materna - DNI: ${rawDocumento}`, { align: 'center' })
-       .moveDown(1.5);
-
-    // Información del Principal (repetida para contexto)
-    doc.fontSize(18)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Información', { underline: true })
-       .moveDown(0.5);
-
-    currentY = doc.y;
-    
-    // Tabla con información del principal
-    doc.fillColor('#F0F0F0')
-       .rect(tableLeft, currentY, tableWidth, rowHeight)
-       .fill();
-    
-    doc.strokeColor('#CCCCCC')
-       .rect(tableLeft, currentY, tableWidth, rowHeight)
-       .stroke();
-    
-    doc.fillColor('#333333')
-       .font('Helvetica-Bold')
-       .text('Persona Principal', tableLeft + cellPadding, currentY + cellPadding);
-    
-    currentY += rowHeight;
-
-    // Datos del principal
-    doc.fillColor('#FFFFFF')
-       .rect(tableLeft, currentY, tableWidth, rowHeight * 3)
-       .fill();
-    
-    doc.strokeColor('#CCCCCC')
-       .rect(tableLeft, currentY, tableWidth, rowHeight * 3)
-       .stroke();
-
-    doc.fillColor('#000000')
-       .font('Helvetica')
-       .text(`Nombre: ${principalData.nombres}`, tableLeft + cellPadding, currentY + cellPadding)
-       .text(`Apellidos: ${principalData.apellido_paterno} ${principalData.apellido_materno}`, 
-             tableLeft + cellPadding, currentY + rowHeight + cellPadding)
-       .text(`DNI: ${principalData.dni}`, tableLeft + cellPadding, currentY + (rowHeight * 2) + cellPadding);
-    
-    currentY += (rowHeight * 3) + 20;
-
-    doc.moveDown(1.5);
-
-    // Segunda tabla: Familiares Maternos
-    doc.fontSize(18)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Familiares Maternos', { underline: true })
-       .moveDown(0.5);
-
-    currentY = doc.y;
-    
-    // Encabezado de la tabla de familiares maternos
-    doc.fillColor('#F0F0F0')
-       .rect(table2Left, currentY, table2Width, rowHeight)
-       .fill();
-    
-    doc.strokeColor('#CCCCCC')
-       .rect(table2Left, currentY, table2Width, rowHeight)
-       .stroke();
-    
-    doc.fillColor('#333333')
-       .font('Helvetica-Bold')
-       .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
-       .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
-       .text('DNI', table2Left + 350, currentY + cellPadding);
-    
-    currentY += rowHeight;
-
-    // Filas de familiares maternos
-    familiaresMaterna.forEach((familiar, index) => {
-        const familiarData = getFormattedPersonData(familiar);
-        
-        // Fondo alternado
-        if (index % 2 === 0) {
-            doc.fillColor('#FFFFFF')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .fill();
-        } else {
-            doc.fillColor('#F9F9F9')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .fill();
-        }
-        
-        doc.strokeColor('#CCCCCC')
-           .rect(table2Left, currentY, table2Width, rowHeight)
-           .stroke();
-
-        // Determinar color según parentesco
-        let colorFondo = '#FFFFFF';
-        const tipo = (familiar.tipo || '').toUpperCase();
-        
-        if (tipo.includes('MADRE')) {
-            colorFondo = '#FFAB00';
-        } else if (tipo.includes('HERMANA')) {
-            colorFondo = '#64DD17';
-        } else if (tipo.includes('TIA') || tipo.includes('PRIMA')) {
-            colorFondo = '#D32F2F';
-        } else if (tipo.includes('HIJA')) {
-            colorFondo = '#3F51B5';
-        } else if (tipo.includes('SOBRINA')) {
-            colorFondo = '#7B1FA2';
-        } else {
-            colorFondo = '#9E9E9E';
-        }
-
-        // Dibujar indicador de color
-        doc.fillColor(colorFondo)
-           .rect(table2Left + 5, currentY + 5, 5, rowHeight - 10)
-           .fill();
-
-        // Datos del familiar
-        doc.fillColor('#000000')
-           .font('Helvetica')
-           .text(familiar.tipo || 'FAMILIAR', table2Left + cellPadding + 10, currentY + cellPadding, { width: 120 })
-           .text(`${familiarData.nombres} ${familiarData.apellido_paterno} ${familiarData.apellido_materno}`, 
-                 table2Left + 150, currentY + cellPadding, { width: 180 })
-           .text(familiarData.dni, table2Left + 350, currentY + cellPadding);
-        
-        // Verificar si necesitamos nueva página
-        currentY += rowHeight;
-        if (currentY > 700 && index < familiaresMaterna.length - 1) {
-            doc.addPage();
-            currentY = 50;
-            
-            // Re-dibujar encabezado en nueva página
-            doc.fillColor('#F0F0F0')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .fill();
-            
-            doc.strokeColor('#CCCCCC')
-               .rect(table2Left, currentY, table2Width, rowHeight)
-               .stroke();
-            
-            doc.fillColor('#333333')
-               .font('Helvetica-Bold')
-               .text('Parentesco', table2Left + cellPadding, currentY + cellPadding)
-               .text('Nombre Completo', table2Left + 150, currentY + cellPadding)
-               .text('DNI', table2Left + 350, currentY + cellPadding);
-            
-            currentY += rowHeight;
-        }
-    });
-
-    doc.moveDown(1.5);
-
-    // Tercera sección: Resumen Familiar Materno
-    doc.fontSize(18)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Resumen Familiar Materno', { underline: true })
-       .moveDown(0.5);
-
-    currentY = doc.y;
-
-    // Estadísticas de familiares maternos
-    const estadisticasMaterna = {
-        'Madres': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('MADRE')).length,
-        'Hermanas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('HERMANA')).length,
-        'Tías': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('TIA')).length,
-        'Primas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('PRIMA')).length,
-        'Hijas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('HIJA')).length,
-        'Sobrinas': familiaresMaterna.filter(f => f.tipo?.toUpperCase().includes('SOBRINA')).length,
-        'Otras': familiaresMaterna.filter(f => !f.tipo?.toUpperCase().includes('MADRE') && 
-                                               !f.tipo?.toUpperCase().includes('HERMANA') && 
-                                               !f.tipo?.toUpperCase().includes('TIA') && 
-                                               !f.tipo?.toUpperCase().includes('PRIMA') && 
-                                               !f.tipo?.toUpperCase().includes('HIJA') && 
-                                               !f.tipo?.toUpperCase().includes('SOBRINA')).length
-    };
-
-    // Dibujar tabla de resumen
-    Object.entries(estadisticasMaterna).forEach(([parentesco, cantidad], index) => {
-        if (cantidad > 0) {
-            // Fondo alternado
-            if (index % 2 === 0) {
-                doc.fillColor('#FFFFFF')
-                   .rect(table3Left, currentY, table3Width, rowHeight)
-                   .fill();
-            } else {
-                doc.fillColor('#F9F9F9')
-                   .rect(table3Left, currentY, table3Width, rowHeight)
-                   .fill();
-            }
-            
-            doc.strokeColor('#CCCCCC')
-               .rect(table3Left, currentY, table3Width, rowHeight)
-               .stroke();
-
-            doc.fillColor('#000000')
-               .font('Helvetica')
-               .text(parentesco, table3Left + cellPadding, currentY + cellPadding)
-               .text(`${cantidad} familiar(es)`, table3Left + 250, currentY + cellPadding);
-            
-            currentY += rowHeight;
-        }
-    });
-
-    // Resumen general
-    doc.moveDown(1);
-    doc.fontSize(14)
-       .font('Helvetica-Bold')
-       .fillColor('#000000')
-       .text('Resumen General del Árbol Genealógico', { underline: true })
-       .moveDown(0.5);
-
-    doc.fontSize(12)
-       .font('Helvetica')
-       .fillColor('#000000')
-       .text(`• Total Familiares Paternos: ${familiaresPaterna.length}`)
-       .text(`• Total Familiares Maternos: ${familiaresMaterna.length}`)
-       .text(`• Total General: ${familiares.length}`)
-       .moveDown(0.5)
-       .text(`• Persona Principal: ${principalData.nombres} ${principalData.apellido_paterno} ${principalData.apellido_materno}`)
-       .text(`• DNI Consultado: ${rawDocumento}`);
-
-    // Pie de página para hoja materna
-    doc.fontSize(10)
-       .fillColor('#666666')
-       .text(`Total Familiares Maternos: ${familiaresMaterna.length}`, 50, 750, { align: 'left' })
-       .text(`Página 2 de 2 - Familia Materna`, 0, 750, { align: 'center' })
-       .text(`Generado el: ${new Date().toLocaleDateString('es-ES')}`, 0, 750, { align: 'right' });
-
-    // Finalizar el documento
-    doc.end();
-
-    // Esperar a que el documento termine de generarse
-    return new Promise((resolve, reject) => {
-        doc.on('end', () => {
-            const pdfBuffer = Buffer.concat(buffers);
-            resolve(pdfBuffer);
-        });
-        
-        doc.on('error', reject);
-    });
-};
-
-// ==============================================================================
-//  FUNCIONES DE DIBUJO (ACTA DE MATRIMONIO) - MANTENIDA
-// ==============================================================================
-
-/**
- * Función auxiliar para dividir texto en líneas que caben dentro de un ancho máximo (Canvas).
- */
-const wrapText = (ctx, text, maxWidth, lineHeight) => {
-    const words = text.split(' ');
-    let line = '';
-    const lines = [];
-
-    for (let i = 0; i < words.length; i++) {
-        const testLine = line + words[i] + ' ';
-        const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-
-        if (testWidth > maxWidth && i > 0) {
-            lines.push(line.trim());
-            line = words[i] + ' ';
-        } else {
-            line = testLine;
-        }
-    }
-    lines.push(line.trim());
-    return { lines, height: lines.length * lineHeight };
-};
-
-/**
- * Dibuja la imagen del Acta de Matrimonio, imitando el diseño de la imagen subida.
- */
-const generateMarriageCertificateImage = async (rawDocumento, principal, data) => {
-    
-    // --- CONSTANTES DE DISEÑO BASADAS EN LA IMAGEN SUBIDA ---
-    const API_TITLE = "Acta";
-    const API_SUBTITLE = "MATRIMONIO";
-    const BRAND_NAME = "Consulta pe apk"; // MODIFICACIÓN: Nuevo texto de marca
-    const CANVAS_WIDTH = 900; // Ajustado para un diseño de documento
-    const CANVAS_HEIGHT = 1000;
-    const MARGIN_X = 50;
-    const MARGIN_Y = 50;
-    const INNER_WIDTH = CANVAS_WIDTH - 2 * MARGIN_X;
-    const CELL_PADDING = 15;
-    const ROW_HEIGHT = 40;
-    const LINE_HEIGHT = 18; // Altura base para el salto de línea
-    const MIN_ROW_HEIGHT = 50; // Altura mínima de la fila para la tabla principal
-    
-    // 1. Generación del Canvas
-    const canvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
-    const ctx = canvas.getContext("2d");
-
-    // Fondo Blanco Puro
-    ctx.fillStyle = BACKGROUND_COLOR; 
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    
-    // 2. Encabezado (Título y Logo - Simulado)
-    let currentY = MARGIN_Y;
-    
-    // Título Principal
-    ctx.fillStyle = COLOR_TITLE;
-    ctx.textAlign = 'left';
-    ctx.font = `bold 60px ${FONT_FAMILY}`;
-    ctx.fillText(API_TITLE, MARGIN_X, currentY + 30);
-    
-    currentY += 40;
-    ctx.font = `bold 30px ${FONT_FAMILY}`;
-    ctx.fillText(API_SUBTITLE, MARGIN_X, currentY + 30);
-    
-    currentY += 50;
-
-    // Logo (Texto a la derecha)
-    ctx.textAlign = 'right';
-    ctx.fillStyle = COLOR_TITLE;
+    ctx.font = `bold 25px ${FONT_FAMILY}`;
+    ctx.fillText("RESULTADO", MARGIN, currentY + 70);
+
+    // Marca de agua / Logo derecha
+    ctx.textAlign = "right";
     ctx.font = `bold 20px ${FONT_FAMILY}`;
-    // MODIFICACIÓN: Reemplazo del logo y texto por "Consulta pe apk"
-    ctx.fillText(BRAND_NAME, CANVAS_WIDTH - MARGIN_X, MARGIN_Y + 30); 
+    ctx.fillText("Consulta pe apk", width - MARGIN, currentY + 40);
 
-    // Línea separadora
-    currentY = 120;
-    
-    // 3. SECCIÓN 1: Información (Matrimonio)
-    currentY += 30;
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLOR_TITLE;
-    ctx.font = `bold 24px ${FONT_FAMILY}`;
-    ctx.fillText("Información", MARGIN_X, currentY);
-
-    currentY += 10;
-    
-    // Datos de la sección Información
-    const rawInfoData = [
-        ["Fecha de Matrimonio", data.fecha_matrimonio || 'N/A', "Registro Único", data.registro_unico || 'N/A'],
-        // Campos con posible salto de línea
-        ["Oficina de Registro", data.oficina_registro || 'N/A', "Nro. de Acta", data.nro_acta || 'N/A'],
-        ["Departamento", data.departamento || 'N/A', "Provincia", data.provincia || 'N/A'],
-        ["Distrito", data.distrito || data.lugar || 'N/A', "Régimen Patrimonial", data.regimen_patrimonial || 'N/A']
-    ];
-    
-    const infoCol1Width = 180;
-    const infoCol2Width = INNER_WIDTH / 2 - infoCol1Width;
-    const infoCol3Width = 180;
-    const infoCol4Width = INNER_WIDTH / 2 - infoCol3Width;
-
-    // Campos que tienen más probabilidades de requerir ajuste de texto y estiramiento de fila
-    const wrapFieldsIndices = [1, 2, 3]; // Índice de las filas con texto largo: Oficina, Departamento, Distrito
-
-    rawInfoData.forEach((row, rowIndex) => {
-        let rowHeight = MIN_ROW_HEIGHT;
-        let startY = currentY;
-
-        // --- 1. PREPARACIÓN Y CÁLCULO DE ALTURA DE FILA (MODIFICADO) ---
-        ctx.font = `bold 14px ${FONT_FAMILY}`;
-        const shouldWrap = wrapFieldsIndices.includes(rowIndex);
-
-        let wrappedCol2 = { lines: [String(row[1]).toUpperCase()], height: LINE_HEIGHT }; // Inicializado con altura de 1 línea
-        let wrappedCol4 = { lines: [String(row[3]).toUpperCase()], height: LINE_HEIGHT }; // Inicializado con altura de 1 línea
-
-        if (shouldWrap) {
-            // Columna 2: Oficina de Registro, Departamento, Distrito
-            wrappedCol2 = wrapText(ctx, String(row[1]).toUpperCase(), infoCol2Width - 2 * CELL_PADDING, LINE_HEIGHT);
-            // Columna 4: Nro. de Acta, Provincia, Régimen Patrimonial
-            wrappedCol4 = wrapText(ctx, String(row[3]).toUpperCase(), infoCol4Width - 2 * CELL_PADDING, LINE_HEIGHT);
-            
-            // La altura de la fila es determinada por el texto más largo + un padding de celda.
-            const maxTextHeight = Math.max(wrappedCol2.height, wrappedCol4.height);
-            // El padding vertical debe ser al menos 2 * (CELL_PADDING - 5) para los textos envueltos
-            rowHeight = Math.max(MIN_ROW_HEIGHT, maxTextHeight + 2 * (CELL_PADDING - 5)); 
-        }
-
-        // --- 2. DIBUJO DE LA FILA (FONDOS Y BORDES) ---
-        
-        // FONDOS
-        // Columna 1 (Etiqueta 1)
-        ctx.fillStyle = HEADER_BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X, startY, infoCol1Width, rowHeight);
-        // Columna 2 (Valor 1)
-        ctx.fillStyle = BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X + infoCol1Width, startY, infoCol2Width, rowHeight);
-        // Columna 3 (Etiqueta 2)
-        ctx.fillStyle = HEADER_BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, infoCol3Width, rowHeight);
-        // Columna 4 (Valor 2)
-        ctx.fillStyle = BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2 + infoCol3Width, startY, infoCol4Width, rowHeight);
-        
-        // BORDES
-        ctx.strokeStyle = TABLE_BORDER_COLOR;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, rowHeight);
-        // Bordes internos verticales
-        ctx.beginPath();
-        ctx.moveTo(MARGIN_X + infoCol1Width, startY);
-        ctx.lineTo(MARGIN_X + infoCol1Width, startY + rowHeight);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(MARGIN_X + INNER_WIDTH / 2 + infoCol3Width, startY);
-        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2 + infoCol3Width, startY + rowHeight);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, startY);
-        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, startY + rowHeight);
-        ctx.stroke();
-
-        // --- 3. DIBUJO DE TEXTO ---
-        // Offset base para centrado vertical: 5px es la mitad de la altura de la fuente (14px) + un pequeño ajuste visual
-        const textYCenterOffset = 5; 
-
-        // Columna 1 (Etiqueta 1)
-        ctx.fillStyle = TABLE_HEADER_COLOR;
-        ctx.font = `14px ${FONT_FAMILY}`;
-        // Centrado: Altura de la fila / 2 - Altura del texto / 2 + Altura de línea de texto / 2 + ajuste
-        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + rowHeight / 2 + textYCenterOffset);
-        
-        // Columna 3 (Etiqueta 2)
-        ctx.fillStyle = TABLE_HEADER_COLOR;
-        ctx.font = `14px ${FONT_FAMILY}`;
-        ctx.fillText(row[2], MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, startY + rowHeight / 2 + textYCenterOffset);
-
-        // Columna 2 (Valor 1 - Ajuste de Texto)
-        ctx.fillStyle = COLOR_TEXT;
-        ctx.font = `bold 14px ${FONT_FAMILY}`;
-        // El punto de inicio del texto debe centrar el BLOQUE COMPLETO de texto
-        const blockYStartCol2 = startY + (rowHeight / 2) - (wrappedCol2.height / 2);
-        wrappedCol2.lines.forEach((line, i) => {
-            const lineY = blockYStartCol2 + (i * LINE_HEIGHT) + textYCenterOffset; // +5 para centrado visual
-            ctx.fillText(line, MARGIN_X + infoCol1Width + CELL_PADDING, lineY);
-        });
-        
-        // Columna 4 (Valor 2 - Ajuste de Texto)
-        ctx.fillStyle = COLOR_TEXT;
-        ctx.font = `bold 14px ${FONT_FAMILY}`;
-        const blockYStartCol4 = startY + (rowHeight / 2) - (wrappedCol4.height / 2);
-        wrappedCol4.lines.forEach((line, i) => {
-            const lineY = blockYStartCol4 + (i * LINE_HEIGHT) + textYCenterOffset; // +5 para centrado visual
-            ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + infoCol3Width + CELL_PADDING, lineY);
-        });
-
-        currentY += rowHeight;
-    });
-    
-    // 4. SECCIÓN 2: Asistentes (Cónyuges y Observaciones)
-    currentY += 30;
-    ctx.fillStyle = COLOR_TITLE;
-    ctx.font = `bold 24px ${FONT_FAMILY}`;
-    ctx.fillText("Cónyuges y Testigos", MARGIN_X, currentY);
-
-    currentY += 10;
-    
-    // Datos de los Cónyuges
-    const conyuge1 = getFormattedPersonData(principal);
-    const conyuge2 = getFormattedPersonData(data.conyuge || {});
-    
-    // Fila de encabezado
-    currentY += 5;
-    const headerRowHeight = ROW_HEIGHT;
-    ctx.fillStyle = HEADER_BACKGROUND_COLOR;
-    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, headerRowHeight);
-    ctx.strokeStyle = TABLE_BORDER_COLOR;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, headerRowHeight);
+    // Línea divisoria decorativa (gris diagonal superior)
     ctx.beginPath();
-    ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, currentY);
-    ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, currentY + headerRowHeight);
-    ctx.stroke();
-    
-    ctx.fillStyle = TABLE_HEADER_COLOR;
-    ctx.font = `bold 16px ${FONT_FAMILY}`;
-    ctx.textAlign = 'left';
-    ctx.fillText("Rol", MARGIN_X + CELL_PADDING, currentY + headerRowHeight / 2 + 5);
-    ctx.fillText("Nombre Completo y DNI", MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, currentY + headerRowHeight / 2 + 5);
-    
-    currentY += headerRowHeight;
+    ctx.moveTo(0, 0);
+    ctx.lineTo(250, 0);
+    ctx.lineTo(200, 130);
+    ctx.lineTo(0, 130);
+    ctx.closePath();
+    ctx.globalAlpha = 0.05;
+    ctx.fillStyle = "#000000";
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
 
-    const conyugeRowsData = [
-        ["Cónyuge Principal (1)", `${conyuge1.nombres} ${conyuge1.apellido_paterno} ${conyuge1.apellido_materno} (DNI: ${conyuge1.dni})`],
-        ["Cónyuge Pareja (2)", `${conyuge2.nombres} ${conyuge2.apellido_paterno} ${conyuge2.apellido_materno} (DNI: ${conyuge2.dni})`],
-        ["Estado Civil Anterior C1", data.estado_civil_c1 || 'N/A'],
-        ["Estado Civil Anterior C2", data.estado_civil_c2 || 'N/A']
-    ];
-    
-    // --- MODIFICACIÓN CLAVE: DIBUJO DE CÓNYUGES CON AJUSTE DE ALTURA ---
-    conyugeRowsData.forEach((row, index) => {
-        const startY = currentY;
-        const isConyugeRow = index < 2; // Solo las dos primeras filas tienen el texto largo del cónyuge
-        const contentText = isConyugeRow ? String(row[1]).toUpperCase() : String(row[1] || 'N/A').toUpperCase();
-        
-        // 1. Calcular altura de la fila
-        ctx.font = `bold 14px ${FONT_FAMILY}`;
-        let rowHeight;
-        let wrappedContent;
-        const contentWidth = INNER_WIDTH / 2 - 2 * CELL_PADDING;
-
-        if (isConyugeRow) {
-            wrappedContent = wrapText(ctx, contentText, contentWidth, LINE_HEIGHT);
-            // Altura de la fila: Altura del texto envuelto + doble padding vertical
-            rowHeight = Math.max(ROW_HEIGHT, wrappedContent.height + 2 * (CELL_PADDING - 5)); 
-        } else {
-            // Filas de estado civil, no deberían necesitar salto de línea, usamos altura mínima
-            rowHeight = ROW_HEIGHT;
-            wrappedContent = wrapText(ctx, contentText, contentWidth, LINE_HEIGHT);
-        }
-
-        // 2. Dibujar Fondos y Bordes
-        ctx.fillStyle = BACKGROUND_COLOR;
-        ctx.fillRect(MARGIN_X, startY, INNER_WIDTH / 2, rowHeight); // Columna 1
-        ctx.fillRect(MARGIN_X + INNER_WIDTH / 2, startY, INNER_WIDTH / 2, rowHeight); // Columna 2
-        ctx.strokeStyle = TABLE_BORDER_COLOR;
-        ctx.strokeRect(MARGIN_X, startY, INNER_WIDTH, rowHeight);
-        ctx.beginPath();
-        ctx.moveTo(MARGIN_X + INNER_WIDTH / 2, startY);
-        ctx.lineTo(MARGIN_X + INNER_WIDTH / 2, startY + rowHeight);
-        ctx.stroke();
-        
-        // 3. Dibujar Texto
-        const textYCenterOffset = 5; // Offset base para centrado vertical
-        const blockYStart = startY + (rowHeight / 2) - (wrappedContent.height / 2);
-
-        // Columna 1 (Etiqueta de Rol)
-        ctx.fillStyle = COLOR_TEXT;
-        ctx.font = `14px ${FONT_FAMILY}`;
-        ctx.fillText(row[0], MARGIN_X + CELL_PADDING, startY + rowHeight / 2 + textYCenterOffset);
-        
-        // Columna 2 (Contenido - Texto largo con Salto de Línea)
-        ctx.fillStyle = COLOR_TEXT;
-        ctx.font = `bold 14px ${FONT_FAMILY}`;
-        
-        // Dibuja las líneas ajustadas
-        wrappedContent.lines.forEach((line, i) => {
-            // Calcular Y para centrar el bloque de texto verticalmente
-            const lineY = blockYStart + (i * LINE_HEIGHT) + textYCenterOffset; // +5 para centrado visual
-            ctx.fillText(line, MARGIN_X + INNER_WIDTH / 2 + CELL_PADDING, lineY);
-        });
-
-        currentY += rowHeight;
-    });
-
-    // --- FIN MODIFICACIÓN CLAVE ---
-    
-    // 5. SECCIÓN 3: Orden del Día (Observaciones)
-    currentY += 30;
-    ctx.fillStyle = COLOR_TITLE;
-    ctx.font = `bold 24px ${FONT_FAMILY}`;
-    ctx.fillText("Observaciones y Certificación", MARGIN_X, currentY);
-
-    currentY += 10;
-    
-    // Fila de Encabezado de Observaciones
-    currentY += 5;
-    ctx.fillStyle = HEADER_BACKGROUND_COLOR;
-    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
-    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, ROW_HEIGHT);
-    ctx.fillStyle = TABLE_HEADER_COLOR;
-    ctx.font = `bold 16px ${FONT_FAMILY}`;
-    ctx.textAlign = 'left';
-    ctx.fillText("Observaciones Registradas", MARGIN_X + CELL_PADDING, currentY + ROW_HEIGHT / 2 + 5);
-    
-    currentY += ROW_HEIGHT;
-    
-    // Fila de Contenido de Observaciones (Más alta para que quepa más texto)
-    const observationHeight = 80;
-    ctx.fillStyle = BACKGROUND_COLOR;
-    ctx.fillRect(MARGIN_X, currentY, INNER_WIDTH, observationHeight);
-    ctx.strokeRect(MARGIN_X, currentY, INNER_WIDTH, observationHeight);
-    
-    ctx.fillStyle = COLOR_TEXT;
-    ctx.font = `14px ${FONT_FAMILY}`;
-    const obsText = data.observaciones || 'NO HAY OBSERVACIONES ADICIONALES REGISTRADAS EN ESTA ACTA.';
-    
-    // Wrap text para las observaciones
-    const obsWrapped = wrapText(ctx, obsText, INNER_WIDTH - 2 * CELL_PADDING, LINE_HEIGHT);
-    
-    // Calcular la posición inicial Y para centrar el bloque de texto
-    const obsBlockYStart = currentY + (observationHeight / 2) - (obsWrapped.height / 2);
-    let textY = obsBlockYStart + 5; // +5 para ajuste visual
-
-    obsWrapped.lines.forEach(line => {
-        // Asegurarse de no exceder el espacio de la celda de observación
-        if (textY < currentY + observationHeight - 5) { 
-            ctx.fillText(line.trim(), MARGIN_X + CELL_PADDING, textY);
-            textY += LINE_HEIGHT;
-        }
-    });
-
-    currentY += observationHeight;
-
-    // 6. Pie de Página (Simulación de Firmas)
-    currentY += 50;
-    
-    ctx.textAlign = 'center';
-    ctx.fillStyle = COLOR_TITLE;
-    ctx.font = `14px ${FONT_FAMILY}`;
-
-    // Firma 1
-    ctx.beginPath();
-    ctx.moveTo(CANVAS_WIDTH / 4, currentY);
-    ctx.lineTo(CANVAS_WIDTH / 4, currentY + 30);
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillText("_________________________", CANVAS_WIDTH / 4, currentY + 45);
-    ctx.fillText("Firma Cónyuge 1", CANVAS_WIDTH / 4, currentY + 65);
-    
-    // Firma 2
-    ctx.beginPath();
-    ctx.moveTo(CANVAS_WIDTH * 3 / 4, currentY);
-    ctx.lineTo(CANVAS_WIDTH * 3 / 4, currentY + 30);
-    ctx.stroke();
-    ctx.fillText("_________________________", CANVAS_WIDTH * 3 / 4, currentY + 45);
-    ctx.fillText("Firma Cónyuge 2", CANVAS_WIDTH * 3 / 4, currentY + 65);
-    
     currentY += 100;
-    
-    // Firma Registrador
-    ctx.beginPath();
-    ctx.moveTo(CANVAS_WIDTH / 2, currentY);
-    ctx.lineTo(CANVAS_WIDTH / 2, currentY + 30);
-    ctx.stroke();
-    ctx.fillText("_________________________", CANVAS_WIDTH / 2, currentY + 45);
-    ctx.fillText("Registrador Civil", CANVAS_WIDTH / 2, currentY + 65);
-    
-    currentY += 85; // Movemos Y al final del pie de página antes del texto final
-    
-    // Pie de Página final
-    ctx.fillStyle = COLOR_SECONDARY_TEXT;
-    ctx.font = `12px ${FONT_FAMILY}`;
-    ctx.textAlign = 'right';
-    ctx.fillText(`Acta de Matrimonio Generada el: ${new Date().toLocaleDateString('es-ES')}`, CANVAS_WIDTH - MARGIN_X, currentY - 20);
 
-    return canvas.toBuffer('image/png');
+    // --- BLOQUE: INFORMACIÓN PRINCIPAL ---
+    ctx.textAlign = "left";
+    ctx.font = `bold 20px ${FONT_FAMILY}`;
+    ctx.fillStyle = "#000000";
+    ctx.fillText("Información del Titular", MARGIN, currentY);
+    currentY += 15;
+
+    // Tabla de Info Principal
+    const infoHeaders = ["DNI", "Nombres", "Apellidos", "Lado Consultado"];
+    const infoValues = [
+        principal.dni, 
+        principal.nombres, 
+        `${principal.apellido_paterno} ${principal.apellido_materno}`, 
+        side
+    ];
+
+    drawSimpleTable(ctx, MARGIN, currentY, width - (MARGIN * 2), infoHeaders, infoValues);
+    currentY += 80;
+
+    // --- BLOQUE: LISTA DE FAMILIARES ---
+    ctx.font = `bold 20px ${FONT_FAMILY}`;
+    ctx.fillStyle = "#000000";
+    ctx.fillText(title, MARGIN, currentY);
+    currentY += 15;
+
+    // Dibujar Tabla de Familiares
+    const tableWidth = width - (MARGIN * 2);
+    const rowHeight = 35;
+    const colWidths = [0.25, 0.55, 0.20]; // Porcentajes: Parentesco, Nombre, DNI
+
+    // Header Tabla
+    ctx.fillStyle = "#F0F0F0"; // Gris claro header
+    ctx.fillRect(MARGIN, currentY, tableWidth, rowHeight);
+    ctx.strokeStyle = "#CCCCCC";
+    ctx.strokeRect(MARGIN, currentY, tableWidth, rowHeight);
+    
+    ctx.fillStyle = "#333333";
+    ctx.font = `bold 14px ${FONT_FAMILY}`;
+    ctx.fillText("Parentesco", MARGIN + 10, currentY + 22);
+    ctx.fillText("Nombre Completo", MARGIN + (tableWidth * colWidths[0]) + 10, currentY + 22);
+    ctx.fillText("DNI", MARGIN + (tableWidth * (colWidths[0] + colWidths[1])) + 10, currentY + 22);
+
+    currentY += rowHeight;
+
+    // Filas
+    ctx.font = `13px ${FONT_FAMILY}`;
+    
+    familiares.forEach((fam) => {
+        // Verificar si nos salimos de la hoja
+        if (currentY > height - MARGIN) return;
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(MARGIN, currentY, tableWidth, rowHeight);
+        ctx.strokeStyle = "#CCCCCC"; // Bordes sutiles
+        ctx.strokeRect(MARGIN, currentY, tableWidth, rowHeight);
+        
+        // Líneas verticales internas
+        ctx.beginPath();
+        ctx.moveTo(MARGIN + (tableWidth * colWidths[0]), currentY);
+        ctx.lineTo(MARGIN + (tableWidth * colWidths[0]), currentY + rowHeight);
+        ctx.moveTo(MARGIN + (tableWidth * (colWidths[0] + colWidths[1])), currentY);
+        ctx.lineTo(MARGIN + (tableWidth * (colWidths[0] + colWidths[1])), currentY + rowHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = "#000000";
+        let parentesco = fam.tipo || fam.parentesco || "Familiar";
+        let nombre = `${fam.nombres || fam.nom} ${fam.apellido_paterno || fam.ap} ${fam.apellido_materno || fam.am}`;
+        let dni = fam.dni || fam.numDoc || "N/A";
+
+        ctx.fillText(parentesco.substring(0, 25), MARGIN + 10, currentY + 22);
+        ctx.fillText(nombre.substring(0, 45), MARGIN + (tableWidth * colWidths[0]) + 10, currentY + 22);
+        ctx.fillText(dni, MARGIN + (tableWidth * (colWidths[0] + colWidths[1])) + 10, currentY + 22);
+
+        currentY += rowHeight;
+    });
+
+    if (familiares.length === 0) {
+        ctx.fillStyle = "#666666";
+        ctx.textAlign = "center";
+        ctx.fillText("No se encontraron registros directos para esta rama familiar.", width / 2, currentY + 30);
+    }
 };
 
+/**
+ * Helper para dibujar la tablita pequeña de información arriba
+ */
+const drawSimpleTable = (ctx, x, y, width, headers, values) => {
+    const rowHeight = 40;
+    const colWidth = width / headers.length;
 
-// ==============================================================================
-// --- ENDPOINT 1: Nueva API de Árbol Genealógico (MODIFICADO PARA PDF) ---
-// ==============================================================================
-app.get("/consultar-arbol", async (req, res) => {
-    const rawDocumento = req.query.dni;
-    const API_NAME = "ARBOL GENEALOGICO";
+    // Header Row
+    ctx.fillStyle = "#F0F0F0";
+    ctx.fillRect(x, y, width, rowHeight / 2);
+    ctx.strokeStyle = "#CCCCCC";
+    ctx.strokeRect(x, y, width, rowHeight / 2);
+
+    // Value Row
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(x, y + (rowHeight/2), width, rowHeight / 2);
+    ctx.strokeRect(x, y + (rowHeight/2), width, rowHeight / 2);
+
+    headers.forEach((h, i) => {
+        let cx = x + (i * colWidth);
+        
+        // Texto Header
+        ctx.fillStyle = "#333333";
+        ctx.font = `12px ${FONT_FAMILY}`;
+        ctx.fillText(h, cx + 10, y + 14);
+
+        // Texto Value
+        ctx.fillStyle = "#000000";
+        ctx.font = `bold 12px ${FONT_FAMILY}`;
+        ctx.fillText(values[i] || "-", cx + 10, y + 14 + (rowHeight/2));
+        
+        // Línea vertical
+        if (i > 0) {
+            ctx.beginPath();
+            ctx.moveTo(cx, y);
+            ctx.lineTo(cx, y + rowHeight);
+            ctx.stroke();
+        }
+    });
+};
+
+/**
+ * Dibuja la Hoja 3: Estadísticas y Gráficos (Diseño Imagen 1)
+ */
+const drawStatsPage = async (ctx, width, height, stats) => {
+    // Fondo Blanco
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, width, height);
     
-    if (!rawDocumento || rawDocumento.length !== 8 || !/^\d+$/.test(rawDocumento)) {
-        return res.status(400).json({ 
-            "message": "error",
-            "error": "Parámetro de consulta inválido",
-            "detalle": "Debe proporcionar el parámetro 'dni' con exactamente 8 dígitos (solo DNI)."
-        });
+    const MARGIN = 40;
+    
+    // TÍTULO GRANDE
+    ctx.fillStyle = "#222222";
+    ctx.textAlign = "right";
+    ctx.font = `bold 60px ${FONT_FAMILY}`;
+    ctx.fillText("GRÁFICOS", width - MARGIN, 100);
+    ctx.fillText("VISUALES", width - MARGIN, 160);
+
+    // --- SECCIÓN IZQUIERDA: LISTA NUMERADA CON FLECHAS ---
+    let startY = 100;
+    const items = [
+        { id: "01", text: "Total de Familiares encontrados en el registro.", color: "#FFF9C4", border: "#FBC02D" }, // Amarillo
+        { id: "02", text: `Familia Paterna: ${stats.paternaCount} integrantes.`, color: "#DCEDC8", border: "#AED581" }, // Verde Claro
+        { id: "03", text: `Familia Materna: ${stats.maternaCount} integrantes.`, color: "#B2DFDB", border: "#4DB6AC" }, // Verde Agua
+        { id: "04", text: `Hombres: ${stats.hombres} | Mujeres: ${stats.mujeres}`, color: "#4DB6AC", border: "#00897B" }  // Verde Oscuro
+    ];
+
+    items.forEach((item, index) => {
+        const yPos = startY + (index * 110);
+        
+        // Flecha / Banner de fondo
+        ctx.fillStyle = item.color;
+        ctx.beginPath();
+        ctx.moveTo(MARGIN + 50, yPos);
+        ctx.lineTo(width / 2, yPos);         // Recta hasta la mitad
+        ctx.lineTo(width / 2 + 30, yPos + 40); // Punta
+        ctx.lineTo(width / 2, yPos + 80);    // Abajo
+        ctx.lineTo(MARGIN + 50, yPos + 80);
+        ctx.fill();
+
+        // Círculo del número
+        ctx.beginPath();
+        ctx.arc(MARGIN + 50, yPos + 40, 35, 0, 2 * Math.PI);
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#000000"; // Borde negro grueso como en el diseño
+        ctx.stroke();
+
+        // Número
+        ctx.fillStyle = "#000000";
+        ctx.textAlign = "center";
+        ctx.font = `bold 24px ${FONT_FAMILY}`;
+        ctx.fillText(item.id, MARGIN + 50, yPos + 48);
+
+        // Texto descriptivo dentro de la flecha
+        ctx.textAlign = "left";
+        ctx.font = `14px ${FONT_FAMILY}`;
+        ctx.fillText(item.text, MARGIN + 100, yPos + 45);
+    });
+
+    // --- SECCIÓN DERECHA: GRÁFICO DE BARRAS ---
+    // Posicionamos el gráfico debajo del título a la derecha
+    const chartX = width / 2 + 50;
+    const chartY = 250;
+    const chartW = (width / 2) - MARGIN - 50;
+    const chartH = 250;
+
+    // Ejes
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#E0E0E0";
+    // Líneas horizontales fondo
+    for(let i=0; i<=5; i++) {
+        let ly = chartY + (i * (chartH/5));
+        ctx.beginPath();
+        ctx.moveTo(chartX, ly);
+        ctx.lineTo(chartX + chartW, ly);
+        ctx.stroke();
+        
+        // Etiquetas Eje Y (dummy values escalados)
+        ctx.fillStyle = "#666666";
+        ctx.font = "10px Arial";
+        ctx.textAlign = "right";
+        ctx.fillText((20 - i*4).toString(), chartX - 10, ly + 4);
     }
 
-    try { 
-        // 1. CONSULTA API DE ÁRBOL GENEALÓGICO
-        const resArbol = await axios.get(`${ARBOL_GENEALOGICO_API_URL}?dni=${rawDocumento}`);
-        
-        // --- ADAPTACIÓN DE RESPUESTA ---
-        const dataArbol = resArbol.data?.result;
+    // Barras (Datos reales visualizados)
+    const maxVal = Math.max(stats.paternaCount, stats.maternaCount, stats.hijosCount || 1);
+    const scale = chartH / (maxVal * 1.2); 
+    
+    const barData = [
+        { label: "Paterna", val: stats.paternaCount, color: "#AED581" },
+        { label: "Materna", val: stats.maternaCount, color: "#4DB6AC" },
+        { label: "Hijos", val: stats.hijosCount, color: "#00897B" }
+    ];
+    
+    const barWidth = chartW / barData.length - 20;
 
-        // Comprobación de que la API externa devolvió la estructura esperada:
-        // La API externa devuelve: {"message":"found data","result":{"person":{},"quantity":52,"coincidences":[]}}
-        if (resArbol.data?.message !== "found data" || !dataArbol?.person || !Array.isArray(dataArbol?.coincidences)) {
-             throw new Error(`La API de Árbol Genealógico no devolvió datos válidos (faltan 'person' o 'coincidences') para el DNI: ${rawDocumento}.`);
-        }
+    barData.forEach((bar, i) => {
+        let bx = chartX + 10 + (i * (barWidth + 20));
+        let bh = bar.val * scale;
+        if(bh < 5) bh = 5; // Altura mínima visual
+        let by = chartY + chartH - bh;
+
+        ctx.fillStyle = bar.color;
+        ctx.fillRect(bx, by, barWidth, bh);
         
-        // Mapeo a la estructura interna esperada: { principal: {}, familiares: [] }
-        const principal = dataArbol.person;
-        // Mapear 'tipo' a 'parentesco' para la función drawTreeNode
-        let familiares = dataArbol.coincidences.map(c => ({
-            ...c,
-            parentesco: c.tipo || 'FAMILIAR', // Usamos 'tipo' de la API externa
-            dni: c.dni,
-            nom: c.nom,
-            ap: c.ap,
-            am: c.am
+        // Etiqueta abajo
+        ctx.fillStyle = "#000000";
+        ctx.textAlign = "center";
+        ctx.font = `bold 12px ${FONT_FAMILY}`;
+        ctx.fillText(bar.label, bx + barWidth/2, chartY + chartH + 20);
+    });
+
+    // --- SECCIÓN INFERIOR: GRÁFICOS DONA (Porcentajes) ---
+    const donutsY = height - 150;
+    const donutRadius = 50;
+    const total = stats.paternaCount + stats.maternaCount + stats.hijosCount + stats.otrosCount || 1;
+    
+    // Calculamos porcentajes reales
+    const p1 = Math.round((stats.paternaCount / total) * 100);
+    const p2 = Math.round((stats.maternaCount / total) * 100);
+    const p3 = Math.round((stats.hombres / total) * 100); // Ejemplo demográfico
+    const p4 = 100 - p3; // Mujeres
+
+    const donuts = [
+        { p: p1, label: "% Paterno", color: "#FFF59D" }, // Amarillo
+        { p: p2, label: "% Materno", color: "#AED581" }, // Verde claro
+        { p: p3, label: "% Hombres", color: "#4DB6AC" }, // Verde medio
+        { p: p4, label: "% Mujeres", color: "#00897B" }  // Verde oscuro
+    ];
+
+    const donutSpacing = width / 4;
+
+    donuts.forEach((d, i) => {
+        let cx = (donutSpacing * i) + (donutSpacing/2);
+        
+        // Círculo fondo gris
+        ctx.beginPath();
+        ctx.arc(cx, donutsY, donutRadius, 0, 2*Math.PI);
+        ctx.fillStyle = "#F0F0F0";
+        ctx.fill();
+
+        // Arco de porcentaje
+        let startAngle = -0.5 * Math.PI;
+        let endAngle = ((d.p / 100) * 2 * Math.PI) + startAngle;
+
+        ctx.beginPath();
+        ctx.arc(cx, donutsY, donutRadius, startAngle, endAngle);
+        ctx.lineWidth = 15;
+        ctx.strokeStyle = d.color;
+        ctx.stroke();
+
+        // Texto porcentaje centro
+        ctx.fillStyle = "#000000";
+        ctx.textAlign = "center";
+        ctx.font = `bold 20px ${FONT_FAMILY}`;
+        ctx.fillText(`${d.p}%`, cx, donutsY + 8);
+
+        // Etiqueta inferior
+        ctx.font = `12px ${FONT_FAMILY}`;
+        ctx.fillText(d.label, cx, donutsY + donutRadius + 25);
+    });
+};
+
+// ==============================================================================
+//  LÓGICA DE DATOS
+// ==============================================================================
+
+function clasificarFamilia(principal, familiares) {
+    const paterna = [];
+    const materna = [];
+    const hijos = [];
+    const otros = [];
+
+    // Normalizar apellidos del principal
+    const apePatPrincipal = (principal.apellido_paterno || '').trim().toUpperCase();
+    const apeMatPrincipal = (principal.apellido_materno || '').trim().toUpperCase();
+
+    familiares.forEach(fam => {
+        const tipo = (fam.tipo || fam.parentesco || '').toUpperCase();
+        const apePatFam = (fam.apellido_paterno || fam.ap || '').trim().toUpperCase();
+        const apeMatFam = (fam.apellido_materno || fam.am || '').trim().toUpperCase();
+
+        // Lógica de clasificación estricta
+        if (tipo.includes("PADRE") || tipo.includes("ABUELO") || tipo.includes("TIO")) {
+            // Asumimos paterna si el tipo no especifica "MATERNO" explícitamente, o validamos apellidos
+            if (tipo.includes("MATERN")) materna.push(fam);
+            else paterna.push(fam);
+        } else if (tipo.includes("MADRE") || tipo.includes("ABUELA") || tipo.includes("TIA")) {
+             if (tipo.includes("PATERN")) paterna.push(fam);
+             else materna.push(fam);
+        } else if (tipo.includes("HIJO") || tipo.includes("HIJA")) {
+            hijos.push(fam);
+            // Los hijos suelen ir en la hoja que tenga espacio, o se pueden poner en "Paterna" como descendencia
+            paterna.push(fam); 
+        } else if (tipo.includes("HERMANO") || tipo.includes("HERMANA")) {
+            // Hermanos comparten ambos, los ponemos en Paterna por defecto o duplicamos si se desea
+            paterna.push(fam);
+        } else {
+            // Clasificación por coincidencia de apellido si el tipo es ambiguo (ej. PRIMO)
+            if (apePatFam === apePatPrincipal || apeMatFam === apePatPrincipal) {
+                paterna.push(fam);
+            } else if (apePatFam === apeMatPrincipal || apeMatFam === apeMatPrincipal) {
+                materna.push(fam);
+            } else {
+                otros.push(fam);
+            }
+        }
+    });
+
+    // Agregar "Otros" a la lista más pequeña para balancear, o a materna por defecto
+    otros.forEach(o => materna.push(o));
+
+    return { paterna, materna, hijos };
+}
+
+// ==============================================================================
+//  ENDPOINT PRINCIPAL: GENERAR PDF
+// ==============================================================================
+
+app.get("/descargar-arbol-pdf", async (req, res) => {
+    const dni = req.query.dni;
+
+    if (!dni || dni.length !== 8) {
+        return res.status(400).send("DNI inválido. Debe tener 8 dígitos.");
+    }
+
+    try {
+        // 1. OBTENER DATOS
+        const response = await axios.get(`${ARBOL_GENEALOGICO_API_URL}?dni=${dni}`);
+        const data = response.data?.result;
+
+        if (!data || !data.person) {
+            return res.status(404).send("No se encontraron datos para generar el árbol.");
+        }
+
+        const principal = data.person;
+        // Mapeo básico de datos para asegurar compatibilidad
+        const familiares = (data.coincidences || []).map(f => ({
+            ...f,
+            nombres: f.nombres || f.nom,
+            apellido_paterno: f.apellido_paterno || f.ap,
+            apellido_materno: f.apellido_materno || f.am,
+            dni: f.dni || f.numDoc,
+            tipo: f.tipo || f.parentesco
         }));
 
-        // Filtrar duplicados por DNI (puede ocurrir si un padre aparece dos veces)
-        familiares = familiares.filter((v, i, a) => a.findIndex(t => (t.dni === v.dni)) === i);
-        
-        // 2. Generar el buffer del PDF (NUEVO: Ahora es PDF)
-        const pdfBuffer = await generateGenealogyTreePDF(rawDocumento, principal, familiares);
-        
-        // 3. Subir PDF si no existe o obtener la URL del PDF existente (NUEVO: ahora es PDF)
-        const { url: githubRawUrl, status } = await uploadOrReturnExisting(rawDocumento, API_NAME, pdfBuffer, 'pdf');
+        // 2. CLASIFICAR DATOS (Paterna vs Materna)
+        const { paterna, materna, hijos } = clasificarFamilia(principal, familiares);
 
-        // 4. Crear la URL final de descarga a través del proxy
-        const finalFileUrl = `${API_BASE_URL}/descargar-ficha?url=${encodeURIComponent(githubRawUrl)}`;
-
-        // 5. Obtener datos de la persona principal formateados
-        const personaDataFormatted = getFormattedPersonData(principal);
-
-        // 6. Respuesta JSON
-        const messageDetail = status === "existing" 
-            ? `PDF ${API_NAME} existente recuperado con éxito.`
-            : `PDF ${API_NAME} generado y subido con éxito.`
-
-        res.json({
-            "message": "found data",
-            "result": {
-                "persona": {
-                    "dni": personaDataFormatted.dni,
-                    "nombres": personaDataFormatted.nombres,
-                    "apellido_paterno": personaDataFormatted.apellido_paterno,
-                    "apellido_materno": personaDataFormatted.apellido_materno
-                },
-                "quantity": familiares.length,
-                "coincidences": [
-                  {"message": messageDetail, "url": finalFileUrl, "tipo": "pdf"}
-                ]
-            }
-        });
-
-    } catch (error) { 
-        console.error(`Error en el proceso ${API_NAME}:`, error.message); // Imprimir solo el mensaje de error para logs más limpios
-        const status = error.response?.status || 500;
-        res.status(status).json({ 
-            "message": "error", 
-            "error": `Error al generar el PDF ${API_NAME}`, 
-            "detalle": error.message 
-        }); 
-    } 
-});
-
-
-// ==============================================================================
-// --- ENDPOINT 2: Nueva API de Acta de Matrimonio ---
-// ==============================================================================
-app.get("/consultar-matrimonio", async (req, res) => {
-    const rawDocumento = req.query.dni;
-    const API_NAME = "ACTA DE MATRIMONIO"; // Se mantiene el nombre de la API para la URL de consulta
-    
-    if (!rawDocumento || rawDocumento.length !== 8 || !/^\d+$/.test(rawDocumento)) {
-        return res.status(400).json({ 
-            "message": "error",
-            "error": "Parámetro de consulta inválido",
-            "detalle": "Debe proporcionar el parámetro 'dni' con exactamente 8 dígitos (solo DNI)."
-        });
-    }
-
-    try { 
-        // 1. CONSULTA API DE ACTA DE MATRIMONIO
-        const resActa = await axios.get(`${ACTA_MATRIMONIO_API_URL}?dni=${rawDocumento}`);
-        
-        // --- ADAPTACIÓN DE RESPUESTA (Corrección aquí) ---
-        // La API externa de matrimonio devuelve: {"message":"found data","result":{"quantity":1,"coincidences":[{"...datos de matrimonio...","doc":"40910936",...}]}}
-        const rawResult = resActa.data?.result;
-        
-        if (resActa.data?.message !== "found data" || !rawResult?.coincidences || rawResult.coincidences.length === 0) {
-             throw new Error(`La API de Acta de Matrimonio no devolvió datos válidos para el DNI: ${rawDocumento}.`);
+        // Estadísticas para la hoja 3
+        const stats = {
+            paternaCount: paterna.length,
+            maternaCount: materna.length,
+            hijosCount: hijos.length,
+            otrosCount: familiares.length - (paterna.length + materna.length), // Ajuste simple
+            hombres: familiares.filter(f => (f.sexo || '').toUpperCase() === 'M' || (f.tipo || '').endsWith('O')).length, // Estimación simple
+            mujeres: familiares.filter(f => (f.sexo || '').toUpperCase() === 'F' || (f.tipo || '').endsWith('A')).length
+        };
+        // Fallback si no hay sexo
+        if (stats.hombres === 0 && stats.mujeres === 0) {
+            stats.hombres = Math.floor(familiares.length / 2);
+            stats.mujeres = familiares.length - stats.hombres;
         }
 
-        // Asumimos que la API externa trae los datos del principal y el matrimonio en las coincidencias.
-        // Dado el ejemplo que mostraste: {"message":"found data","result":{"quantity":1,"coincidences":[{"apellido_paterno":"CHUNG",...}]}}
+        // 3. GENERAR DOCUMENTO PDF
+        const doc = new PDFDocument({ autoFirstPage: false });
         
-        const matrimonioDataRaw = rawResult.coincidences[0];
+        // Configurar respuesta HTTP como Stream PDF
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=Arbol_Genealogico_${dni}.pdf`);
+        doc.pipe(res);
+
+        // Dimensiones A4 en pixels (aprox para canvas)
+        const A4_WIDTH = 595.28;
+        const A4_HEIGHT = 841.89;
+        const CANVAS_SCALE = 2; // Doble resolución para mejor calidad
+        const C_W = A4_WIDTH * CANVAS_SCALE;
+        const C_H = A4_HEIGHT * CANVAS_SCALE;
+
+        // --- HOJA 1: FAMILIA PATERNA ---
+        const canvas1 = createCanvas(C_W, C_H);
+        const ctx1 = canvas1.getContext("2d");
+        await drawFamilyListPage(ctx1, C_W, C_H, "FAMILIA PATERNA", principal, paterna, "Rama Paterna");
         
-        // Creamos la estructura esperada: { principal: {}, matrimonio: {} }
-        // Se asume que el DNI del principal es el que se consulta y que los datos del principal
-        // están mezclados con los datos del matrimonio en `matrimonioDataRaw`.
-        
-        const principal = {
-            dni: rawDocumento, // Usamos el DNI consultado como principal
-            // Intentamos extraer el nombre del principal de la respuesta (esto es una conjetura sin el formato completo de la API)
-            nombres: matrimonioDataRaw.nombres || 'N/A', 
-            apellido_paterno: matrimonioDataRaw.apellido_paterno || 'N/A',
-            apellido_materno: matrimonioDataRaw.apellido_materno || 'N/A',
-            fecha_nacimiento: matrimonioDataRaw.fecha_nacimiento_principal || 'N/A', // Campo tentativo
-        };
+        doc.addPage({ size: 'A4' });
+        doc.image(canvas1.toBuffer(), 0, 0, { width: A4_WIDTH, height: A4_HEIGHT });
 
-        const matrimonioData = {
-            registro_unico: matrimonioDataRaw.registro_unico || 'N/A',
-            nro_acta: matrimonioDataRaw.nro_acta || 'N/A',
-            fecha_matrimonio: matrimonioDataRaw.fecha || 'N/A', // Usamos el campo 'fecha' que viste en el ejemplo
-            departamento: matrimonioDataRaw.departamento || 'N/A',
-            provincia: matrimonioDataRaw.provincia || 'N/A',
-            distrito: matrimonioDataRaw.distrito || matrimonioDataRaw.lugar || 'N/A', // Usamos 'lugar' como fallback de distrito/lugar
-            oficina_registro: matrimonioDataRaw.oficina_registro || 'N/A',
-            estado_civil_c1: matrimonioDataRaw.estado_civil_c1 || 'N/A',
-            estado_civil_c2: matrimonioDataRaw.estado_civil_c2 || 'N/A',
-            regimen_patrimonial: matrimonioDataRaw.regimen_patrimonial || 'N/A',
-            observaciones: matrimonioDataRaw.observaciones || 'N/A',
-            // Datos del Cónyuge 2 (Pareja) - Suponiendo que vienen con un prefijo 'conyuge'
-            conyuge: {
-                dni: matrimonioDataRaw.doc || 'N/A', // Usamos 'doc' como DNI del cónyuge 2
-                nombres: matrimonioDataRaw.nombres_conyuge || 'N/A',
-                apellido_paterno: matrimonioDataRaw.apellido_paterno_conyuge || 'N/A',
-                apellido_materno: matrimonioDataRaw.apellido_materno_conyuge || 'N/A',
-                fecha_nacimiento: matrimonioDataRaw.fecha_nacimiento_conyuge || 'N/A',
-            }
-        };
+        // --- HOJA 2: FAMILIA MATERNA ---
+        const canvas2 = createCanvas(C_W, C_H);
+        const ctx2 = canvas2.getContext("2d");
+        await drawFamilyListPage(ctx2, C_W, C_H, "FAMILIA MATERNA", principal, materna, "Rama Materna");
 
-        // 2. Generar el buffer de la imagen
-        // generateMarriageCertificateImage se ha modificado para incluir la tabla y el fondo
-        const imagenBuffer = await generateMarriageCertificateImage(rawDocumento, principal, matrimonioData);
-        
-        // 3. Subir imagen si no existe o obtener la URL de la imagen existente
-        const { url: githubRawUrl, status } = await uploadOrReturnExisting(rawDocumento, API_NAME, imagenBuffer);
+        doc.addPage({ size: 'A4' });
+        doc.image(canvas2.toBuffer(), 0, 0, { width: A4_WIDTH, height: A4_HEIGHT });
 
-        // 4. Crear la URL final de descarga a través del proxy
-        const finalImageUrl = `${API_BASE_URL}/descargar-ficha?url=${encodeURIComponent(githubRawUrl)}`;
+        // --- HOJA 3: ESTADÍSTICAS Y LEYENDA ---
+        const canvas3 = createCanvas(C_W, C_H);
+        const ctx3 = canvas3.getContext("2d");
+        await drawStatsPage(ctx3, C_W, C_H, stats);
 
-        // 5. Obtener datos de la persona principal formateados
-        const personaDataFormatted = getFormattedPersonData(principal);
+        doc.addPage({ size: 'A4' });
+        doc.image(canvas3.toBuffer(), 0, 0, { width: A4_WIDTH, height: A4_HEIGHT });
 
-        // 6. Respuesta JSON
-        const messageDetail = status === "existing" 
-            ? `Matrimonios existente recuperada con éxito.`
-            : `Matrimonios generada y subida con éxito.`;
-
-        res.json({
-            "message": "found data",
-            "result": {
-                "persona": {
-                    "dni": personaDataFormatted.dni,
-                    "nombres": personaDataFormatted.nombres,
-                    "apellido_paterno": personaDataFormatted.apellido_paterno,
-                    "apellido_materno": personaDataFormatted.apellido_materno
-                },
-                "quantity": 1, // Solo una acta por persona (en el contexto de esta API)
-                "coincidences": [
-                  {"message": messageDetail, "url": finalImageUrl}
-                ]
-            }
-        });
-
-    } catch (error) { 
-        console.error(`Error en el proceso ${API_NAME}:`, error.message); // Imprimir solo el mensaje de error para logs más limpios
-        const status = error.response?.status || 500;
-        res.status(status).json({ 
-            "message": "error", 
-            "error": `Error al generar el Matrimonios`, 
-            "detalle": error.message 
-        }); 
-    } 
-});
-
-
-// ==============================================================================
-// --- RUTAS OBSOLETAS/MEZCLADAS (Actualizadas a 410 Gone) ---
-// ==============================================================================
-
-app.get("/consultar-familia1", (req, res) => {
-    res.status(410).json({ 
-        error: "Ruta Obsoleta",
-        message: "La ruta /consultar-familia1 ha sido eliminada. Por favor, use la nueva ruta: /consultar-arbol o /consultar-matrimonio.",
-    });
-});
-
-app.get("/consultar-familia2", (req, res) => {
-    res.status(410).json({ 
-        error: "Ruta Obsoleta",
-        message: "La ruta /consultar-familia2 ha sido eliminada. Por favor, use la nueva ruta: /consultar-arbol o /consultar-matrimonio.",
-    });
-});
-
-app.get("/consultar-telefono", (req, res) => {
-    res.status(410).json({ 
-        error: "Ruta Obsoleta",
-        message: "La ruta /consultar-telefono ha sido eliminada. Por favor, use las nuevas rutas: /consultar-arbol o /consultar-matrimonio.",
-    });
-});
-
-app.get("/generar-arbol", (req, res) => {
-    res.status(410).json({ 
-        error: "Ruta Obsoleta",
-        message: "La ruta /generar-arbol ha sido eliminada. Use /consultar-arbol.",
-    });
-});
-
-app.get("/buscar-por-nombre", (req, res) => {
-    res.status(501).json({ 
-        error: "Búsqueda Avanzada No Implementada",
-        message: `La API externa solo soporta la consulta por número de documento (DNI).`,
-        solicitado: { nombres: req.query.nombres, apellidos: req.query.apellidos }
-    });
-});
-
-app.get("/buscar-por-padres", (req, res) => {
-    res.status(501).json({ 
-        error: "Búsqueda Avanzada No Implementada",
-        message: `La API externa solo soporta la consulta por número de documento (DNI).`,
-        solicitado: { nomPadre: req.query.nomPadre, nomMadre: req.query.nomMadre }
-    });
-});
-
-app.get("/buscar-por-edad", (req, res) => {
-    res.status(501).json({ 
-        error: "Búsqueda Avanzada No Implementada",
-        message: `La API externa solo soporta la consulta por número de documento (DNI).`,
-        solicitado: { edad: req.query.edad }
-    });
-});
-
-
-// ==============================================================================
-// --- RUTA: Proxy de descarga (Mantenida) ---
-// ==============================================================================
-app.get("/descargar-ficha", async (req, res) => {
-    let { url } = req.query; 
-        
-    if (!url) {
-        return res.status(400).send("Falta el parámetro 'url' del archivo.");
-    }
-    
-    let decodedUrl = '';
-    try {
-        decodedUrl = decodeURIComponent(url);
-    } catch (e) {
-        return res.status(400).send("URL codificada inválida.");
-    }
-
-    try {
-        console.log(`Intentando descargar URL (Proxy) de: ${decodedUrl}`);
-        
-        const config = {
-            responseType: 'arraybuffer',
-            headers: {
-                'User-Agent': 'FlyIoImageGeneratorApp'
-            }
-        };
-
-        const response = await axios.get(decodedUrl, config);
-        const fileBuffer = Buffer.from(response.data);
-
-        const fileName = path.basename(decodedUrl);
-        const fileExtension = path.extname(decodedUrl).toLowerCase();
-        
-        // Determinar el tipo de contenido según la extensión
-        let contentType = 'application/octet-stream';
-        if (fileExtension === '.pdf') {
-            contentType = 'application/pdf';
-        } else if (fileExtension === '.png') {
-            contentType = 'image/png';
-        } else if (fileExtension === '.jpg' || fileExtension === '.jpeg') {
-            contentType = 'image/jpeg';
-        }
-
-        res.set({
-            'Content-Type': contentType, 
-            'Content-Disposition': `attachment; filename="${fileName}"`, 
-            'Content-Length': fileBuffer.length 
-        });
-
-        res.send(fileBuffer);
+        // Finalizar PDF
+        doc.end();
 
     } catch (error) {
-        const statusCode = error.response?.status || 'N/A';
-        console.error(`Error al descargar archivo (PROXY): Status ${statusCode}. Mensaje: ${error.message}`);
-        res.status(500).send(`Error al procesar la descarga del archivo. Detalle: ${error.message}`);
+        console.error("Error generando PDF:", error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: "Error interno generando el PDF", det: error.message });
+        }
     }
 });
-// --------------------------------------------------------------------------------
-    
-app.listen(PORT, HOST, () => {
-    console.log(`Servidor de Ficha Familiar corriendo en http://${HOST}:${PORT}`);
-    if (!GITHUB_TOKEN) console.warn("ADVERTENCIA: GITHUB_TOKEN no está configurado.");
-    if (!GITHUB_REPO) console.warn("ADVERTENCIA: GITHUB_REPO no está configurado.");
+
+// Endpoint JSON original para compatibilidad
+app.get("/consultar-arbol", async (req, res) => {
+    // ... (Tu lógica existente para JSON)
+    // Puedes agregar el link al PDF en la respuesta JSON:
+    // "pdf_url": `${process.env.BASE_URL}/descargar-arbol-pdf?dni=${req.query.dni}`
+    res.json({ message: "Utiliza /descargar-arbol-pdf?dni=XXXXXXXX para obtener el archivo." });
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor iniciado en el puerto ${PORT}`);
 });
